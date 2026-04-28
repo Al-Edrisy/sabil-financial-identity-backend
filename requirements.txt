@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pydantic[email]
+pydantic-settings
+python-dotenv
+firebase-admin
+python-multipart
+alembic
+# AI Libraries (commented for lightweight start)
+# easyocr
+# deepface
+# opencv-python-headless
