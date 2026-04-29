@@ -66,13 +66,33 @@ async def on_startup() -> None:
         async with engine.begin() as conn:
             logger.info("🔧 Synchronizing database schema…")
             await conn.run_sync(Base.metadata.create_all)
-            
-            # Manual column additions for existing tables (metadata.create_all doesn't ALTER)
-            logger.info("🛠️ Checking for missing columns in kyc_records…")
-            await conn.execute(text("ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS full_name VARCHAR;"))
-            await conn.execute(text("ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS dob VARCHAR;"))
-            await conn.execute(text("ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS gender VARCHAR;"))
-            
+
+            # Add new columns to existing tables (idempotent — IF NOT EXISTS)
+            logger.info("🛠️  Checking for missing columns…")
+            migrations = [
+                # users table — new onboarding fields
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS country_code VARCHAR(4);",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN NOT NULL DEFAULT FALSE;",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_step SMALLINT NOT NULL DEFAULT 0;",
+                # Make email and phone nullable for phone-only users
+                "ALTER TABLE users ALTER COLUMN email DROP NOT NULL;",
+                "ALTER TABLE users ALTER COLUMN phone_number DROP NOT NULL;",
+                "ALTER TABLE users ALTER COLUMN firebase_uid DROP NOT NULL;",
+                # kyc_records — issue date
+                "ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS document_issued_at TIMESTAMPTZ;",
+                "ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS full_name VARCHAR;",
+                "ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS dob VARCHAR;",
+                "ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS gender VARCHAR;",
+                "ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR;",
+                "ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS liveness_details JSONB;",
+                "ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS id_number_hash VARCHAR;",
+            ]
+            for sql in migrations:
+                try:
+                    await conn.execute(text(sql))
+                except Exception as col_err:
+                    logger.debug(f"Migration skipped (likely already applied): {col_err}")
+
             logger.info("✅ Schema synchronization complete.")
     except Exception as e:
         logger.error(f"❌ Schema sync failed: {e}")
