@@ -80,6 +80,11 @@ def check_document_authenticity(
         }
     checks["decodable"] = True
 
+    # ── Normalize orientation before aspect ratio check ───────────────────────
+    # A landscape photo of a portrait passport should be rotated first.
+    from app.ai.ocr_image import normalize_orientation as _norm_orient
+    img = _norm_orient(img)
+
     h, w = img.shape[:2]
 
     # ── 2. Resolution ─────────────────────────────────────────────────────────
@@ -88,18 +93,17 @@ def check_document_authenticity(
         reasons.append(f"Image too small ({w}×{h} px); expected ≥ 200×200")
 
     # ── 3. Aspect ratio (on perspective-corrected crop) ───────────────────────
-    # We apply perspective correction here to isolate the document boundary.
-    # Checking aspect ratio on the raw image is unreliable as it includes
-    # the background / surface the ID is resting on.
     img_rect   = correct_perspective(img)
     h_c, w_c   = img_rect.shape[:2]
     aspect     = (w_c / h_c) if h_c > 0 else 0.0
     lo, hi     = _ASPECT_RANGES.get(id_type, (0.5, 2.5))
     checks["aspect_ratio"] = lo <= aspect <= hi
     if not checks["aspect_ratio"]:
+        # Soft warning only — don't hard-fail on aspect ratio alone
+        # (photos taken at an angle or with background will fail this)
         reasons.append(
             f"Document aspect ratio {aspect:.2f} unexpected for '{id_type}' "
-            f"(expected {lo:.2f}–{hi:.2f})"
+            f"(expected {lo:.2f}–{hi:.2f}) — soft warning"
         )
 
     # ── 4. ID number extracted ────────────────────────────────────────────────
@@ -187,6 +191,7 @@ def check_document_authenticity(
     score  = sum(1 for k in scored if checks.get(k, False)) / len(scored)
 
     # Hard-fail: resolution, ID number, type-match, expiry, and MRZ checksum.
+    # Aspect ratio is a soft check — photos taken at angles will fail it.
     passed = (
         checks["resolution"]
         and checks["id_number_found"]
