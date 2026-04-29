@@ -40,3 +40,9 @@ firebase-credentials.json
 
 # OS
 .DS_Store
+
+
+alembic.ini
+pytest.ini
+uploads/
+

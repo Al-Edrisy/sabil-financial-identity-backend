@@ -1,27 +1,110 @@
-version: '3.8'
+version: '3.9'
 
 services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
   db:
     image: postgres:15-alpine
+    restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=sabil
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       sabil
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API ─────────────────────────────────────────────────────────────────────
   api:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    restart: unless-stopped
     ports:
       - "8000:8000"
+    volumes:
+      - uploads_kyc:/app/uploads/kyc
+      - uploads_statements:/app/uploads/statements
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/sabil
+      # Database
+      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@db:5432/sabil"
+
+      # Security
+      SECRET_KEY:              "${SECRET_KEY:-change-me-in-production}"
+      KYC_PII_ENCRYPTION_KEY:  "${KYC_PII_ENCRYPTION_KEY:-}"
+
+      # CORS
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000}"
+
+      # Firebase
+      FIREBASE_CREDENTIALS_PATH: "firebase-credentials.json"
+
+      # Storage
+      STORAGE_BACKEND: "local"
+      KYC_UPLOAD_DIR:  "uploads/kyc"
+      CREDIT_UPLOAD_DIR: "uploads/statements"
+
+      # Redis
+      REDIS_URL: "redis://redis:6379/0"
+
+      # Webhooks
+      KYC_WEBHOOK_URL:    "${KYC_WEBHOOK_URL:-}"
+      CREDIT_WEBHOOK_URL: "${CREDIT_WEBHOOK_URL:-}"
+      WEBHOOK_SECRET:     "${WEBHOOK_SECRET:-}"
+
+      # KYC thresholds
+      KYC_FACE_MATCH_THRESHOLD:        "0.6"
+      KYC_FACE_MATCH_MANUAL_THRESHOLD: "0.4"
+      KYC_LIVENESS_MIN_VARIANCE:       "80.0"
+      KYC_LIVENESS_MANUAL_THRESHOLD:   "60.0"
+      KYC_REQUIRE_LIVENESS:            "true"
+      KYC_MAX_RESUBMISSIONS:           "3"
+      KYC_EXPIRY_DAYS:                 "365"
+      KYC_OCR_MIN_CONFIDENCE:          "0.45"
+
+      # Credit scoring
+      CREDIT_SCORE_MIN_TRANSACTIONS: "3"
+      CREDIT_SCORE_INCOME_CAP:       "50000.0"
+      CREDIT_CATEGORIZER_THRESHOLD:  "70"
+
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Alembic migrations (run-once job) ───────────────────────────────────────
+  migrate:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@db:5432/sabil"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
 
 volumes:
   postgres_data:
+  uploads_kyc:
+  uploads_statements:
