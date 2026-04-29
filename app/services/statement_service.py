@@ -53,305 +53,6 @@ _TYPE_MAP = {
     "unknown": ParsedTransactionType.UNKNOWN,
 }
 
-class StatementService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
-        self.audit_service = AuditService(db)
-        self._storage = get_storage()
-
-    async def upload_statements_batch(
-        self,
-        user_id:      int,
-        files:        List[UploadFile],
-        user_country: Optional[str] = None,
-    ) -> dict:
-        """
-        Processes multiple financial documents, extracts transactions,
-        and recomputes the user's credit score.
-        """
-        upload_id = str(uuid.uuid4())
-        all_parsed_rows = []
-        
-        # ── 1. Process each file ─────────────────────────────────────────────
-        for file in files:
-            content = await file.read()
-            # Basic validation (mime, size)
-            validate_financial_document(content, file.filename, file.content_type)
-            
-            # Save to storage
-            file_category = get_file_category(file.filename, file.content_type)
-            suffix = Path(file.filename or "").suffix or ".bin"
-            saved_path = self._storage.save(content, f"{user_id}/{upload_id}_{uuid.uuid4().hex}{suffix}")
-
-            # Extract text based on type
-            text_lines = []
-            if file_category == "pdf":
-                text_lines = extract_text_from_pdf(content)
-            elif file_category == "csv":
-                text_lines = extract_text_from_csv(content)
-            elif file_category == "text":
-                text_lines = extract_text_from_plain(content)
-            elif file_category == "image":
-                # OCR for images
-                preprocessed = preprocess_statement(content)
-                if preprocessed:
-                    reader_latin, reader_arabic = get_statement_ocr_reader()
-                    # Simple strategy: try both, pick best lines
-                    # (Simplified for now — just using latin if available)
-                    raw = reader_latin.readtext(preprocessed["processed"], detail=0) if reader_latin else []
-                    text_lines = raw
-
-            # ── 2. Parse transactions from text ──────────────────────────────
-            parsed_rows = parse_transactions(text_lines)
-            
-            # Apply currency conversion if country provided
-            home_currency = get_currency_for_country(user_country) if user_country else "USD"
-            
-            for row in parsed_rows:
-                # Normalise amount to USD (signal service requirement)
-                normalized_usd, _ = convert_currency(row.amount, row.currency or home_currency, "USD")
-                
-                all_parsed_rows.append({
-                    "user_id":           user_id,
-                    "upload_id":         upload_id,
-                    "raw_line":          row.raw_line,
-                    "description":       row.description,
-                    "amount":            row.amount,
-                    "currency":          row.currency or home_currency,
-                    "normalized_amount": normalized_usd,
-                    "type":              _TYPE_MAP.get(row.type, ParsedTransactionType.UNKNOWN),
-                    "transaction_date":  row.transaction_date,
-                    "confidence":        row.confidence,
-                    "needs_review":      row.needs_review,
-                })
-
-        if not all_parsed_rows:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No transactions could be extracted from the provided files.",
-            )
-
-        # ── 3. Categorize transactions ───────────────────────────────────────
-        descriptions = [r["description"] for r in all_parsed_rows]
-        categories = categorize_many(descriptions)
-        for row, (cat, _) in zip(all_parsed_rows, categories):
-            row["category"] = cat
-
-        # ── 4. Persist transactions ──────────────────────────────────────────
-        db_rows = [ParsedTransaction(**r) for r in all_parsed_rows]
-        self.db.add_all(db_rows)
-        await self.db.flush() # flush to get IDs if needed
-
-        # ── 5. Recompute Credit Score ────────────────────────────────────────
-        history_result = await self.db.execute(
-            select(ParsedTransaction).where(ParsedTransaction.user_id == user_id)
-        )
-        all_tx_history = history_result.scalars().all()
-        
-        # Convert to dicts for signal service
-        history_dicts = [
-            {
-                "normalized_usd":   t.normalized_amount,
-                "type":             t.type,
-                "transaction_date": t.transaction_date,
-                "created_at":       t.created_at,
-                "category":         t.category,
-            }
-            for t in all_tx_history
-        ]
-
-        signals = compute_signals(history_dicts)
-        score_val = compute_score(signals)
-        risk = get_risk_level(score_val)
-        insights = generate_insights(signals, score_val)
-        summary = build_transactions_summary(history_dicts)
-
-        # Archive old scores
-        await self.db.execute(
-            update(CreditScore)
-            .where(CreditScore.user_id == user_id, CreditScore.is_active == True)
-            .values(is_active=False)
-        )
-
-        # Create new score
-        new_score = CreditScore(
-            user_id              = user_id,
-            score                = score_val,
-            risk_level           = risk,
-            income_level         = signals.income_level,
-            income_stability     = signals.income_stability,
-            savings_rate         = signals.savings_rate,
-            activity             = signals.activity,
-            burden               = signals.burden,
-            insights             = insights,
-            transactions_summary = summary,
-            upload_id            = upload_id,
-            transaction_count    = len(all_tx_history),
-            data_quality         = signals.data_quality,
-            is_active            = True,
-        )
-        self.db.add(new_score)
-        
-        await self.db.commit()
-        await self.db.refresh(new_score)
-
-        # ── 6. Finalize ──────────────────────────────────────────────────────
-        await self.audit_service.log_action(
-            action   = "CREDIT_SCORE_COMPUTATION",
-            user_id  = user_id,
-            metadata = {"upload_id": upload_id, "score": score_val, "risk": risk},
-        )
-        
-        await webhook_service.notify_credit_score_update(
-            user_id   = user_id,
-            score     = score_val,
-            risk_level= risk,
-        )
-
-        return {
-            "upload_id":          upload_id,
-            "row_count":          len(all_parsed_rows),
-            "needs_review_count": sum(1 for r in all_parsed_rows if r["needs_review"]),
-            "score":              new_score,
-        }
-
-    async def get_score(self, user_id: int) -> Optional[CreditScore]:
-        result = await self.db.execute(
-            select(CreditScore)
-            .where(CreditScore.user_id == user_id, CreditScore.is_active == True)
-            .order_by(CreditScore.computed_at.desc())
-        )
-        return result.scalar_one_or_none()
-
-    async def get_review_queue(self, user_id: int) -> List[ParsedTransaction]:
-        result = await self.db.execute(
-            select(ParsedTransaction)
-            .where(ParsedTransaction.user_id == user_id, ParsedTransaction.needs_review == True)
-            .order_by(ParsedTransaction.transaction_date.desc())
-        )
-        return list(result.scalars().all())
-
-    async def get_transactions(
-        self,
-        user_id:      int,
-        page:         int = 1,
-        page_size:    int = 20,
-        tx_type:      Optional[str] = None,
-        needs_review: Optional[bool] = None,
-    ) -> dict:
-        stmt = select(ParsedTransaction).where(ParsedTransaction.user_id == user_id)
-        
-        if tx_type:
-            stmt = stmt.where(ParsedTransaction.type == ParsedTransactionType(tx_type))
-        if needs_review is not None:
-            stmt = stmt.where(ParsedTransaction.needs_review == needs_review)
-            
-        # Count
-        from sqlalchemy import func
-        count_stmt = select(func.count()).select_from(stmt.subquery())
-        total = (await self.db.execute(count_stmt)).scalar() or 0
-        
-        # Rows
-        result = await self.db.execute(
-            stmt.order_by(ParsedTransaction.transaction_date.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
-        items = result.scalars().all()
-        
-        return {
-            "total":     total,
-            "page":      page,
-            "page_size": page_size,
-            "items":     items,
-        }
-
-    async def correct_transaction(
-        self,
-        tx_id:      int,
-        user_id:    int,
-        correction: dict,
-    ) -> CreditScore:
-        """
-        Update a transaction manually and trigger a score recompute.
-        """
-        # Fetch transaction
-        result = await self.db.execute(
-            select(ParsedTransaction).where(ParsedTransaction.id == tx_id, ParsedTransaction.user_id == user_id)
-        )
-        tx = result.scalar_one_or_none()
-        if not tx:
-            raise HTTPException(status_code=404, detail="Transaction not found")
-
-        # Update fields
-        for key, value in correction.items():
-            if key == "type":
-                setattr(tx, key, ParsedTransactionType(value))
-            else:
-                setattr(tx, key, value)
-        
-        # Mark as manual source and no longer needs review
-        tx.source = ParsedTransactionSource.MANUAL
-        tx.needs_review = False
-        
-        # If amount or currency changed, re-normalise
-        if "amount" in correction or "currency" in correction:
-            norm_usd, _ = convert_currency(tx.amount, tx.currency, "USD")
-            tx.normalized_amount = norm_usd
-
-        await self.db.flush()
-
-        # Recompute score
-        history_result = await self.db.execute(
-            select(ParsedTransaction).where(ParsedTransaction.user_id == user_id)
-        )
-        all_tx_history = history_result.scalars().all()
-        history_dicts = [
-            {
-                "normalized_usd":   t.normalized_amount,
-                "type":             t.type,
-                "transaction_date": t.transaction_date,
-                "created_at":       t.created_at,
-                "category":         t.category,
-            }
-            for t in all_tx_history
-        ]
-
-        signals = compute_signals(history_dicts)
-        score_val = compute_score(signals)
-        risk = get_risk_level(score_val)
-        insights = generate_insights(signals, score_val)
-        summary = build_transactions_summary(history_dicts)
-
-        # Archive old scores
-        await self.db.execute(
-            update(CreditScore)
-            .where(CreditScore.user_id == user_id, CreditScore.is_active == True)
-            .values(is_active=False)
-        )
-
-        new_score = CreditScore(
-            user_id              = user_id,
-            score                = score_val,
-            risk_level           = risk,
-            income_level         = signals.income_level,
-            income_stability     = signals.income_stability,
-            savings_rate         = signals.savings_rate,
-            activity             = signals.activity,
-            burden               = signals.burden,
-            insights             = insights,
-            transactions_summary = summary,
-            upload_id            = tx.upload_id,
-            transaction_count    = len(all_tx_history),
-            data_quality         = signals.data_quality,
-            is_active            = True,
-        )
-        self.db.add(new_score)
-        await self.db.commit()
-        await self.db.refresh(new_score)
-
-        return new_score
-
 
 class StatementService:
     def __init__(self, db: AsyncSession):
@@ -469,18 +170,38 @@ class StatementService:
         """
         Tesseract fallback OCR — used when EasyOCR is not installed.
         Supports English, Turkish, and Arabic (if language packs installed).
+        Uses OpenCV for image loading (handles more formats than PIL).
         """
         try:
             import pytesseract
             from PIL import Image
             import io
+            import cv2
+            import numpy as np
 
-            img = Image.open(io.BytesIO(image_bytes))
+            # Try PIL first (faster)
+            pil_img = None
+            try:
+                pil_img = Image.open(io.BytesIO(image_bytes))
+                if pil_img.mode not in ('RGB', 'L'):
+                    pil_img = pil_img.convert('RGB')
+            except Exception:
+                pass
+
+            # Fall back to OpenCV → PIL conversion
+            if pil_img is None:
+                nparr = np.frombuffer(image_bytes, np.uint8)
+                img_cv = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img_cv is None:
+                    logger.error("Tesseract: could not decode image")
+                    return []
+                rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+                pil_img = Image.fromarray(rgb)
 
             # Try multilingual first, fall back to English only
             for lang in ["eng+tur+ara", "eng+tur", "eng"]:
                 try:
-                    text = pytesseract.image_to_string(img, lang=lang)
+                    text = pytesseract.image_to_string(pil_img, lang=lang)
                     lines = [l.strip() for l in text.split('\n') if l.strip()]
                     if lines:
                         logger.info(f"Tesseract OCR ({lang}): {len(lines)} lines extracted")

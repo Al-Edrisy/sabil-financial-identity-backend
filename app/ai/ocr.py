@@ -141,10 +141,12 @@ def extract_text_from_id(image_bytes: bytes, id_type: str = "national_id") -> di
     """
     Full OCR pipeline for a KYC identity document.
     Uses multi-variant preprocessing to maximise extraction quality.
+    Falls back to Tesseract if EasyOCR is not installed.
     """
     reader = get_ocr_reader()
     if not reader:
-        return {"error": "OCR engine not available"}
+        # Fallback: Tesseract
+        return _extract_text_from_id_tesseract(image_bytes, id_type)
 
     try:
         all_results = _run_ocr_best_variant(reader, image_bytes)
@@ -194,4 +196,83 @@ def extract_text_from_id(image_bytes: bytes, id_type: str = "national_id") -> di
 
     except Exception as exc:
         logger.error(f"OCR processing failed: {exc}", exc_info=True)
+        return {"error": str(exc)}
+
+
+def _extract_text_from_id_tesseract(image_bytes: bytes, id_type: str = "national_id") -> dict:
+    """
+    Tesseract fallback for KYC ID OCR when EasyOCR is not installed.
+    Handles passports, national IDs in English, Arabic, and Turkish.
+    """
+    try:
+        import pytesseract
+        from PIL import Image
+        import io
+        import cv2
+        import numpy as np
+
+        # Load image
+        pil_img = None
+        try:
+            pil_img = Image.open(io.BytesIO(image_bytes))
+            if pil_img.mode not in ('RGB', 'L'):
+                pil_img = pil_img.convert('RGB')
+        except Exception:
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            img_cv = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img_cv is not None:
+                rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+                pil_img = Image.fromarray(rgb)
+
+        if pil_img is None:
+            return {"error": "Could not decode image"}
+
+        # Try multilingual OCR
+        raw_text = []
+        for lang in ["eng+ara", "eng+tur", "eng"]:
+            try:
+                text = pytesseract.image_to_string(pil_img, lang=lang, config='--psm 6')
+                lines = [l.strip() for l in text.split('\n') if l.strip()]
+                if lines:
+                    raw_text = lines
+                    logger.info(f"Tesseract KYC OCR ({lang}): {len(lines)} lines")
+                    break
+            except Exception:
+                continue
+
+        if not raw_text:
+            return {"error": "Tesseract OCR returned no text"}
+
+        # Build result with field extraction and MRZ parsing
+        extracted = {
+            "raw_text":   raw_text,
+            "ocr_tokens": [{"text": t, "confidence": 0.8, "bbox": []} for t in raw_text],
+            **extract_fields(raw_text, id_type),
+        }
+
+        mrz = parse_mrz(raw_text)
+        if mrz:
+            extracted["mrz"]         = mrz
+            extracted["full_name"]   = mrz.get("mrz_full_name")   or extracted.get("full_name")
+            extracted["id_number"]   = mrz.get("mrz_doc_number")  or extracted.get("id_number")
+            extracted["dob"]         = mrz.get("mrz_dob")         or extracted.get("dob")
+            extracted["expiry_date"] = mrz.get("mrz_expiry")      or extracted.get("expiry_date")
+            extracted["nationality"] = mrz.get("mrz_nationality") or extracted.get("nationality")
+            extracted["country"]     = mrz.get("mrz_country")     or extracted.get("country")
+            extracted["gender"]      = mrz.get("mrz_sex")         or extracted.get("gender")
+
+        logger.info(
+            f"Tesseract KYC complete [id_type={id_type}]: "
+            f"name={'✓' if extracted.get('full_name')   else '✗'} "
+            f"id={'✓'   if extracted.get('id_number')   else '✗'} "
+            f"dob={'✓'  if extracted.get('dob')         else '✗'} "
+            f"expiry={'✓' if extracted.get('expiry_date') else '✗'}"
+        )
+        return extracted
+
+    except ImportError:
+        logger.error("Neither EasyOCR nor pytesseract is installed.")
+        return {"error": "OCR engine not available. Install easyocr or pytesseract."}
+    except Exception as exc:
+        logger.error(f"Tesseract KYC OCR failed: {exc}", exc_info=True)
         return {"error": str(exc)}

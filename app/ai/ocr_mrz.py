@@ -218,7 +218,24 @@ def parse_mrz(raw_texts: list[str]) -> dict:
                 merged = "".join(clean_lines[i:j])
                 if len(merged) in (30, 36, 44) and merged not in clean_lines:
                     extra_candidates.append(merged)
-        all_lines = clean_lines + extra_candidates
+
+        # Also try trimming lines that are slightly too long (OCR adds extra chars)
+        # A TD3 line should be exactly 44 chars — try all 44-char substrings
+        trimmed_candidates: list[str] = []
+        for ln in clean_lines:
+            if 44 < len(ln) <= 50:
+                # Try trimming from start and end
+                for start in range(len(ln) - 44 + 1):
+                    candidate = ln[start:start + 44]
+                    if candidate not in clean_lines and candidate not in extra_candidates:
+                        trimmed_candidates.append(candidate)
+            elif 30 < len(ln) <= 35:
+                for start in range(len(ln) - 30 + 1):
+                    candidate = ln[start:start + 30]
+                    if candidate not in clean_lines:
+                        trimmed_candidates.append(candidate)
+
+        all_lines = clean_lines + extra_candidates + trimmed_candidates
 
         # ── TD3 (Passports — 2 × 44) ─────────────────────────────────────────
         td3_lines = [ln for ln in all_lines if len(ln) == 44]

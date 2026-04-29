@@ -117,7 +117,11 @@ _SKIP_RE = re.compile(
     r"التاريخ|الوصف|المبلغ|الرصيد|المعاملة|الحساب|الصفحة|الإجمالي|"
     # Turkish
     r"tarih|açıklama|aciklama|tutar|bakiye|işlem|islem|hesap|sayfa|"
-    r"toplam|borç|alacak|borc|referans|dekont|ekstre"
+    r"toplam|borç|alacak|borc|referans|dekont|ekstre|"
+    # Turkish bank receipt fields (should not be parsed as transactions)
+    r"sube|şube|iban|numarasi|numarası|vergi|kimlik|komisyon|"
+    r"alacakli|alacaklı|hesabinizdan|hesabınızdan|valor|"
+    r"taraflar|merkez|internet|mobil|www\."
     r")\b",
     re.IGNORECASE | re.UNICODE,
 )
@@ -374,6 +378,8 @@ def _strategy_c(lines: list[str]) -> list[ParsedRow]:
 _RECEIPT_AMOUNT_PATTERNS = [
     # Turkish: "Havale Tutari : 335,00 USD"
     re.compile(r'Havale\s+Tutar[ıi]\s*[:\-]\s*([\d.,]+)\s*([A-Z]{3})', re.IGNORECASE | re.UNICODE),
+    # OCR-garbled variants: "eval Tutan 15000 USD", "avale Tutar 150 USD"
+    re.compile(r'(?:eval|avale|Havale)\s+Tuta[rn][ıi]?\s*[:\-]?\s*([\d.,]+)\s*([A-Z]{3})', re.IGNORECASE | re.UNICODE),
     # Turkish: "Hesabinizdan 335,06 USD"
     re.compile(r'Hesab[ıi]n[ıi]zdan\s+([\d.,]+)\s*([A-Z]{3})', re.IGNORECASE | re.UNICODE),
     # Arabic: "المبلغ : 500.00 SAR"
@@ -382,22 +388,26 @@ _RECEIPT_AMOUNT_PATTERNS = [
     re.compile(r'Amount\s*[:\-]\s*([\d.,]+)\s*([A-Z]{3})', re.IGNORECASE),
     # Generic: "Total : 500.00"
     re.compile(r'Total\s*[:\-]\s*([\d.,]+)', re.IGNORECASE),
+    # Komisyon line (always present in Ziraat receipts — use as receipt detector)
+    re.compile(r'Komisyon\s*[:\-]?\s*[\d.,]+\s*([A-Z]{3})', re.IGNORECASE | re.UNICODE),
 ]
 
 _RECEIPT_DATE_PATTERNS = [
-    # "ISLEM TARIH 03/04/2026-12:56:01"
-    re.compile(r'(?:ISLEM\s+TARIH[İI]?|VALOR|Date)\s*[:\-]?\s*(\d{1,2}[./]\d{1,2}[./]\d{4})', re.IGNORECASE | re.UNICODE),
+    # "ISLEM TARIH 03/04/2026-12:56:01" or "guem Tania 2ay04/2026"
+    re.compile(r'(?:ISLEM\s+TARIH[İI]?|VALOR|Date|guem\s+Tania|ator)\s*[:\-]?\s*(\d{1,2}[./]\d{1,2}[./]\d{4})', re.IGNORECASE | re.UNICODE),
     # "03/04/2026" standalone
     re.compile(r'\b(\d{1,2}[./]\d{1,2}[./]\d{4})\b'),
+    # "23.03.2026" (dot-separated)
+    re.compile(r'\b(\d{2}\.\d{2}\.\d{4})\b'),
 ]
 
 _RECEIPT_DESC_PATTERNS = [
-    # "Aciklama : ..." or "Açıklama : ..."
-    re.compile(r'A[cç][ıi]klama\s*[:\-]\s*(.{3,80}?)(?:\s{2,}|\n|$)', re.IGNORECASE | re.UNICODE),
+    # "Aciklama : ..." or "Açıklama : ..." or OCR-garbled "Agldama:"
+    re.compile(r'A[gcç][ıil][dk]lama\s*[:\-]\s*(.{3,80}?)(?:\s{2,}|\n|$)', re.IGNORECASE | re.UNICODE),
     # "Description : ..."
     re.compile(r'Description\s*[:\-]\s*(.{3,80}?)(?:\s{2,}|\n|$)', re.IGNORECASE),
     # "Alacakli Adi Soyadi : NAME" — capture only the name (up to next field)
-    re.compile(r'Alacakl[ıi]\s+Adi\s+Soyadi\s*[:\-]\s*([A-Za-z\u0600-\u06FF\s]{3,60}?)(?:\s{2,}|\n|Alacakl|Komisyon|Havale|$)', re.IGNORECASE | re.UNICODE),
+    re.compile(r'(?:Alacakl[ıi]\s+Adi\s+Soyadi|call\s+Ad\s+Soyo)\s*[:\-]?\s*([A-Za-z\u0600-\u06FF\s]{3,60}?)(?:\s{2,}|\n|Alacakl|Komisyon|Havale|$)', re.IGNORECASE | re.UNICODE),
 ]
 
 # Receipt type indicators

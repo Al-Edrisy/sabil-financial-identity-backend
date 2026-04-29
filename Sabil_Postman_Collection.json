@@ -1,3826 +1,576 @@
 {
-  "openapi": "3.1.0",
   "info": {
-    "title": "Sabil Financial Identity",
-    "description": "Sabil \u2014 Financial Identity Backend API",
-    "version": "0.1.0"
+    "name": "Sabil — Financial Identity Backend",
+    "_postman_id": "sabil-api-v1",
+    "description": "Complete API collection for the Sabil Financial Identity Backend.\n\n**Base URL:** `http://localhost:8001/api/v1`\n\n**Authentication:** Most endpoints require `Authorization: Bearer {{access_token}}`.\nObtain a token via `POST /auth/send-otp` → `POST /auth/verify-otp`.\n\n**Dev bypass:** Phone `+96742424242` + OTP code `7744` always succeeds.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
   },
-  "paths": {
-    "/api/v1/health": {
-      "get": {
-        "tags": [
-          "health"
-        ],
-        "summary": "Health Check",
-        "operationId": "health_check_api_v1_health_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+  "variable": [
+    { "key": "base_url",     "value": "http://localhost:8001/api/v1", "type": "string" },
+    { "key": "access_token", "value": "",                             "type": "string" },
+    { "key": "admin_token",  "value": "",                             "type": "string" },
+    { "key": "user_id",      "value": "1",                            "type": "string" },
+    { "key": "tx_id",        "value": "1",                            "type": "string" }
+  ],
+  "item": [
+
+    {
+      "name": "🏥 Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] },
+            "description": "Returns `{\"status\": \"healthy\"}`. No auth required."
           }
         }
-      }
+      ]
     },
-    "/api/v1/auth/send-otp": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Step 1a \u2014 Send OTP to Phone Number",
-        "description": "Sends a one-time password to the provided phone number. **Dev bypass:** phone `+96742424242` always receives code `7744`. Rate limited to 3 requests per minute per IP.",
-        "operationId": "send_otp_api_v1_auth_send_otp_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SendOTPRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OTPResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/verify-otp": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Step 1b \u2014 Verify OTP and Create/Login User",
-        "description": "Verifies the OTP code. On success, creates a new account (first time) or logs in the existing user. Returns `access_token` (use as `Authorization: Bearer <token>`) and the user profile. **Dev bypass:** phone `+96742424242` with code `7744` always succeeds.",
-        "operationId": "verify_otp_api_v1_auth_verify_otp_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VerifyOTPRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/login": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Authenticate via Firebase Token",
-        "description": "Verifies a Firebase ID token and returns the user profile. Creates a new user account and wallet on first login. Use `/auth/send-otp` + `/auth/verify-otp` for the phone OTP flow.",
-        "operationId": "login_api_v1_auth_login_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_login_api_v1_auth_login_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/User"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/users/me": {
-      "get": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Get Current User Profile",
-        "description": "Returns the profile of the currently authenticated user.",
-        "operationId": "get_me_api_v1_users_me_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/User"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      },
-      "delete": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Delete Own Account",
-        "description": "Permanently deletes the authenticated user's account and all associated data.",
-        "operationId": "delete_me_api_v1_users_me_delete",
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Update User Profile",
-        "description": "Updates non-sensitive profile information for the current user.",
-        "operationId": "update_me_api_v1_users_me_patch",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UserUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/User"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/users/me/onboarding-status": {
-      "get": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Get Onboarding Progress",
-        "description": "Returns the current onboarding step and what the user needs to do next.",
-        "operationId": "get_onboarding_status_api_v1_users_me_onboarding_status_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OnboardingStatus"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/users": {
-      "get": {
-        "tags": [
-          "users"
-        ],
-        "summary": "List All Users (Admin Only)",
-        "description": "Allows an administrator to retrieve a paginated and filtered list of all users.",
-        "operationId": "list_users_api_v1_users_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "skip",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 0,
-              "title": "Skip"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 100,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "email",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Email"
-            }
-          },
-          {
-            "name": "phone",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Phone"
-            }
-          },
-          {
-            "name": "is_active",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Is Active"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/User"
-                  },
-                  "title": "Response List Users Api V1 Users Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/users/{user_id}": {
-      "get": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Get User by ID (Admin Only)",
-        "description": "Allows an administrator to retrieve any user's profile by their internal ID.",
-        "operationId": "get_user_by_id_api_v1_users__user_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "User Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/User"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Update Any User (Admin Only)",
-        "description": "Allows an administrator to update any user's profile or status.",
-        "operationId": "admin_update_user_api_v1_users__user_id__patch",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "User Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UserUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/User"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/wallet/balance": {
-      "get": {
-        "tags": [
-          "wallet"
-        ],
-        "summary": "Get Wallet Balance",
-        "description": "Returns the current user's wallet balance and currency.",
-        "operationId": "get_balance_api_v1_wallet_balance_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WalletResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/wallet/transfer": {
-      "post": {
-        "tags": [
-          "wallet"
-        ],
-        "summary": "Transfer Funds to Another User",
-        "description": "Transfers funds from the current user's wallet to another user by their ID.",
-        "operationId": "transfer_api_v1_wallet_transfer_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WalletTransferRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TransactionResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/wallet/withdraw": {
-      "post": {
-        "tags": [
-          "wallet"
-        ],
-        "summary": "Withdraw Funds",
-        "description": "Executes a withdrawal from the user's wallet.",
-        "operationId": "withdraw_api_v1_wallet_withdraw_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WalletWithdrawRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TransactionResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/wallet/history": {
-      "get": {
-        "tags": [
-          "wallet"
-        ],
-        "summary": "Get Transaction History",
-        "description": "Returns the full transaction history for the authenticated user.",
-        "operationId": "get_history_api_v1_wallet_history_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/TransactionResponse"
-                  },
-                  "type": "array",
-                  "title": "Response Get History Api V1 Wallet History Get"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/wallet/transactions/{transaction_id}": {
-      "get": {
-        "tags": [
-          "wallet"
-        ],
-        "summary": "Get Transaction Details",
-        "description": "Fetches details for a specific transaction by its ID.",
-        "operationId": "get_transaction_api_v1_wallet_transactions__transaction_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "transaction_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Transaction Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TransactionResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/wallet/topup": {
-      "post": {
-        "tags": [
-          "wallet"
-        ],
-        "summary": "Top Up Wallet (Simulated)",
-        "description": "Simulates a wallet top-up. Replace with real payment gateway in production.",
-        "operationId": "topup_api_v1_wallet_topup_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WalletTopUpRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TransactionResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/kyc/verify": {
-      "post": {
-        "tags": [
-          "kyc"
-        ],
-        "summary": "Step 2 \u2014 Submit KYC Verification",
-        "description": "Upload a government-issued ID photo and a live selfie. Optionally provide manual fields (full_name, id_number, issue_date, etc.) which override OCR extraction when provided. The system performs OCR, liveness detection, and face matching.",
-        "operationId": "verify_kyc_api_v1_kyc_verify_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_verify_kyc_api_v1_kyc_verify_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/KYCResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/kyc/resubmit": {
-      "post": {
-        "tags": [
-          "kyc"
-        ],
-        "summary": "Resubmit KYC After Rejection",
-        "description": "Re-attempt verification after a REJECTED status. Capped by KYC_MAX_RESUBMISSIONS setting.",
-        "operationId": "resubmit_kyc_api_v1_kyc_resubmit_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_resubmit_kyc_api_v1_kyc_resubmit_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/KYCResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/kyc/status": {
-      "get": {
-        "tags": [
-          "kyc"
-        ],
-        "summary": "Get Current Verification Status",
-        "description": "Returns the most recent active KYC record with full verification details.",
-        "operationId": "get_current_kyc_status_api_v1_kyc_status_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/KYCResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/kyc/history": {
-      "get": {
-        "tags": [
-          "kyc"
-        ],
-        "summary": "View Full Verification History",
-        "description": "Returns all past KYC attempts including rejections.",
-        "operationId": "get_kyc_history_api_v1_kyc_history_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/KYCResponse"
-                  },
-                  "type": "array",
-                  "title": "Response Get Kyc History Api V1 Kyc History Get"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/kyc/debug-ocr": {
-      "post": {
-        "tags": [
-          "kyc"
-        ],
-        "summary": "Debug: Inspect OCR Output from ID Image",
-        "description": "Upload an ID image and see exactly what OCR extracted \u2014 raw tokens, field extraction results, MRZ parsing. No data is saved. Use to diagnose OCR quality issues.",
-        "operationId": "debug_kyc_ocr_api_v1_kyc_debug_ocr_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_debug_kyc_ocr_api_v1_kyc_debug_ocr_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "title": "Response Debug Kyc Ocr Api V1 Kyc Debug Ocr Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/admin/kyc/list": {
-      "get": {
-        "tags": [
-          "admin \u2014 kyc"
-        ],
-        "summary": "List and Filter KYC Applications (Admin)",
-        "operationId": "list_kyc_applications_api_v1_admin_kyc_list_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/KYCStatus"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by status",
-              "title": "Status"
+
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "1a — Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"+96742424242\",\n  \"country_code\": \"+967\"\n}"
             },
-            "description": "Filter by status"
-          },
-          {
-            "name": "expired_only",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "description": "Only expired VERIFIED records",
-              "default": false,
-              "title": "Expired Only"
-            },
-            "description": "Only expired VERIFIED records"
-          },
-          {
-            "name": "user_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by user ID",
-              "title": "User Id"
-            },
-            "description": "Filter by user ID"
-          },
-          {
-            "name": "id_number",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Partial ID number search",
-              "title": "Id Number"
-            },
-            "description": "Partial ID number search"
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 20,
-              "title": "Page Size"
-            }
+            "url": { "raw": "{{base_url}}/auth/send-otp", "host": ["{{base_url}}"], "path": ["auth","send-otp"] },
+            "description": "Sends OTP to phone. Dev bypass: `+96742424242` always gets code `7744`. Rate limited: 3 req/min."
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/KYCListResponse"
-                }
+        },
+        {
+          "name": "1b — Verify OTP (get token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const r = pm.response.json();",
+                  "if (r.access_token) {",
+                  "  pm.collectionVariables.set('access_token', r.access_token);",
+                  "  pm.collectionVariables.set('user_id', r.user.id);",
+                  "  console.log('✅ Token saved:', r.access_token.slice(0,20)+'...');",
+                  "}"
+                ],
+                "type": "text/javascript"
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"+96742424242\",\n  \"otp_code\": \"7744\",\n  \"full_name\": \"Test User\",\n  \"country_code\": \"+967\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/verify-otp", "host": ["{{base_url}}"], "path": ["auth","verify-otp"] },
+            "description": "Verifies OTP. Returns `access_token` + user profile. Token is auto-saved to `{{access_token}}`."
+          }
+        },
+        {
+          "name": "Login via Firebase Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_token\": \"<firebase_id_token_here>\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth","login"] },
+            "description": "Legacy Firebase token login. Creates user + wallet on first call."
           }
         }
-      }
+      ]
     },
-    "/api/v1/admin/kyc/{user_id}/review": {
-      "post": {
-        "tags": [
-          "admin \u2014 kyc"
-        ],
-        "summary": "Submit Manual KYC Review (Admin)",
-        "operationId": "submit_admin_review_api_v1_admin_kyc__user_id__review_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "User Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/KYCAdminReviewRequest"
-              }
-            }
+
+    {
+      "name": "👤 Users",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users","me"] },
+            "description": "Returns the authenticated user's profile."
           }
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/KYCAdminResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/credit/debug-ocr": {
-      "post": {
-        "tags": [
-          "credit scoring"
-        ],
-        "summary": "Debug: Inspect OCR + Parser Output",
-        "description": "Upload a statement image and see exactly what OCR extracted and how the parser classified each line. No data is saved to the DB. Use this to diagnose why transactions are showing as 'unknown'.",
-        "operationId": "debug_ocr_api_v1_credit_debug_ocr_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_debug_ocr_api_v1_credit_debug_ocr_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "title": "Response Debug Ocr Api V1 Credit Debug Ocr Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+        {
+          "name": "Get Onboarding Status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/users/me/onboarding-status", "host": ["{{base_url}}"], "path": ["users","me","onboarding-status"] },
+            "description": "Returns current onboarding step, KYC status, credit status, and next action URL."
           }
         },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/credit/currencies": {
-      "get": {
-        "tags": [
-          "credit scoring"
-        ],
-        "summary": "List All Supported Currencies",
-        "description": "Returns all currencies supported for financial document processing with their exchange rates.",
-        "operationId": "get_currencies_api_v1_credit_currencies_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {},
-                  "type": "array",
-                  "title": "Response Get Currencies Api V1 Credit Currencies Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/credit/upload": {
-      "post": {
-        "tags": [
-          "credit scoring"
-        ],
-        "summary": "Step 3 \u2014 Upload Financial Documents",
-        "description": "Upload one or more financial documents for credit scoring. **Supported formats:** JPEG, PNG, WebP (images), PDF, CSV, TXT. **Multiple files:** send multiple `files` fields in the same request. All files are processed together and contribute to the same score. Optionally provide `user_country` (ISO code e.g. 'YE', 'SA') to convert foreign currency amounts to the user's home currency.",
-        "operationId": "upload_statements_api_v1_credit_upload_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_upload_statements_api_v1_credit_upload_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadStatementResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/credit/score": {
-      "get": {
-        "tags": [
-          "credit scoring"
-        ],
-        "summary": "Get Latest Credit Score",
-        "description": "Returns the most recent active credit score for the authenticated user.",
-        "operationId": "get_score_api_v1_credit_score_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreditScoreResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/credit/transactions/review": {
-      "get": {
-        "tags": [
-          "credit scoring"
-        ],
-        "summary": "Get Transactions Flagged for Review",
-        "description": "Returns all parsed transaction rows that need human review.",
-        "operationId": "get_review_queue_api_v1_credit_transactions_review_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ParsedTransactionResponse"
-                  },
-                  "type": "array",
-                  "title": "Response Get Review Queue Api V1 Credit Transactions Review Get"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/credit/transactions": {
-      "get": {
-        "tags": [
-          "credit scoring"
-        ],
-        "summary": "List Parsed Transactions",
-        "description": "Returns a paginated list of parsed transactions for the current user.",
-        "operationId": "list_transactions_api_v1_credit_transactions_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 20,
-              "title": "Page Size"
-            }
-          },
-          {
-            "name": "type",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter: income | expense | unknown",
-              "title": "Type"
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Updated Name\",\n  \"email\": \"user@example.com\",\n  \"country_code\": \"YE\"\n}"
             },
-            "description": "Filter: income | expense | unknown"
-          },
-          {
-            "name": "needs_review",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by review flag",
-              "title": "Needs Review"
-            },
-            "description": "Filter by review flag"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParsedTransactionListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/credit/transactions/{transaction_id}/correct": {
-      "put": {
-        "tags": [
-          "credit scoring"
-        ],
-        "summary": "Correct a Parsed Transaction",
-        "description": "Fix a misparse (wrong amount, description, or type). Triggers automatic score recomputation.",
-        "operationId": "correct_transaction_api_v1_credit_transactions__transaction_id__correct_put",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "transaction_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Transaction Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ParsedTransactionCorrection"
-              }
-            }
+            "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users","me"] },
+            "description": "Updates non-sensitive profile fields."
           }
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreditScoreResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/credit/list": {
-      "get": {
-        "tags": [
-          "admin \u2014 credit"
-        ],
-        "summary": "List All Credit Scores (Admin)",
-        "description": "Paginated list of all users' active credit scores. Filter by risk_level.",
-        "operationId": "list_all_scores_api_v1_admin_credit_list_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "risk_level",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "trusted | moderate | risky",
-              "title": "Risk Level"
-            },
-            "description": "trusted | moderate | risky"
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 20,
-              "title": "Page Size"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "title": "Response List All Scores Api V1 Admin Credit List Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/credit/users/{user_id}/transactions": {
-      "get": {
-        "tags": [
-          "admin \u2014 credit"
-        ],
-        "summary": "View Any User's Parsed Transactions (Admin)",
-        "operationId": "get_user_transactions_api_v1_admin_credit_users__user_id__transactions_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "User Id"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 20,
-              "title": "Page Size"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParsedTransactionListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/credit/users/{user_id}/rescore": {
-      "post": {
-        "tags": [
-          "admin \u2014 credit"
-        ],
-        "summary": "Force Recompute Credit Score (Admin)",
-        "description": "Recomputes the credit score from all existing parsed transactions.",
-        "operationId": "rescore_user_api_v1_admin_credit_users__user_id__rescore_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "User Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreditScoreResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/credit/review-queue": {
-      "get": {
-        "tags": [
-          "admin \u2014 credit"
-        ],
-        "summary": "Global Review Queue (Admin)",
-        "description": "All needs_review=True rows across all users.",
-        "operationId": "global_review_queue_api_v1_admin_credit_review_queue_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 20,
-              "title": "Page Size"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParsedTransactionListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/credit/transactions/{transaction_id}/resolve": {
-      "post": {
-        "tags": [
-          "admin \u2014 credit"
-        ],
-        "summary": "Resolve a Flagged Transaction (Admin)",
-        "description": "Mark a needs_review row as resolved. Optionally correct type/category.",
-        "operationId": "resolve_transaction_api_v1_admin_credit_transactions__transaction_id__resolve_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "transaction_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Transaction Id"
-            }
-          },
-          {
-            "name": "correct_type",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "income | expense | unknown",
-              "title": "Correct Type"
-            },
-            "description": "income | expense | unknown"
-          },
-          {
-            "name": "correct_category",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Correct Category"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParsedTransactionResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "AuthResponse": {
-        "properties": {
-          "access_token": {
-            "type": "string",
-            "title": "Access Token"
-          },
-          "token_type": {
-            "type": "string",
-            "title": "Token Type",
-            "default": "bearer"
-          },
-          "user": {
-            "$ref": "#/components/schemas/User"
+        {
+          "name": "Delete My Account",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/users/me", "host": ["{{base_url}}"], "path": ["users","me"] },
+            "description": "Permanently deletes account and all associated data. Returns 204."
           }
         },
-        "type": "object",
-        "required": [
-          "access_token",
-          "user"
-        ],
-        "title": "AuthResponse",
-        "description": "Returned after successful OTP verification."
-      },
-      "Body_debug_kyc_ocr_api_v1_kyc_debug_ocr_post": {
-        "properties": {
-          "id_card": {
-            "type": "string",
-            "format": "binary",
-            "title": "Id Card",
-            "description": "ID card image to inspect"
-          },
-          "id_type": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/IDType"
-              }
-            ],
-            "default": "national_id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id_card"
-        ],
-        "title": "Body_debug_kyc_ocr_api_v1_kyc_debug_ocr_post"
-      },
-      "Body_debug_ocr_api_v1_credit_debug_ocr_post": {
-        "properties": {
-          "statement": {
-            "type": "string",
-            "format": "binary",
-            "title": "Statement"
-          }
-        },
-        "type": "object",
-        "required": [
-          "statement"
-        ],
-        "title": "Body_debug_ocr_api_v1_credit_debug_ocr_post"
-      },
-      "Body_login_api_v1_auth_login_post": {
-        "properties": {
-          "id_token": {
-            "type": "string",
-            "title": "Id Token",
-            "description": "Firebase ID token from client SDK"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id_token"
-        ],
-        "title": "Body_login_api_v1_auth_login_post"
-      },
-      "Body_resubmit_kyc_api_v1_kyc_resubmit_post": {
-        "properties": {
-          "id_card": {
-            "type": "string",
-            "format": "binary",
-            "title": "Id Card",
-            "description": "Updated photo of identity document"
-          },
-          "selfie": {
-            "type": "string",
-            "format": "binary",
-            "title": "Selfie",
-            "description": "New live selfie"
-          },
-          "id_type": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/IDType"
-              }
-            ],
-            "description": "Document type",
-            "default": "national_id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id_card",
-          "selfie"
-        ],
-        "title": "Body_resubmit_kyc_api_v1_kyc_resubmit_post"
-      },
-      "Body_upload_statements_api_v1_credit_upload_post": {
-        "properties": {
-          "files": {
-            "items": {
-              "type": "string",
-              "format": "binary"
-            },
-            "type": "array",
-            "title": "Files",
-            "description": "One or more financial documents (image/PDF/CSV/TXT, max 25MB each)"
-          },
-          "user_country": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Country",
-            "description": "ISO country code for currency conversion (e.g. YE, SA, TR)"
-          }
-        },
-        "type": "object",
-        "required": [
-          "files"
-        ],
-        "title": "Body_upload_statements_api_v1_credit_upload_post"
-      },
-      "Body_verify_kyc_api_v1_kyc_verify_post": {
-        "properties": {
-          "id_card": {
-            "type": "string",
-            "format": "binary",
-            "title": "Id Card",
-            "description": "Clear photo of government-issued ID (JPEG/PNG/WebP, max 10MB)"
-          },
-          "selfie": {
-            "type": "string",
-            "format": "binary",
-            "title": "Selfie",
-            "description": "Live selfie \u2014 face must be clearly visible"
-          },
-          "id_type": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/IDType"
-              }
-            ],
-            "description": "Document type",
-            "default": "national_id"
-          },
-          "full_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Full Name",
-            "description": "Full name as on document"
-          },
-          "id_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Id Number",
-            "description": "Passport/ID number"
-          },
-          "issue_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Issue Date",
-            "description": "Document issue date (YYYY-MM-DD)"
-          },
-          "expiry_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expiry Date",
-            "description": "Document expiry date (YYYY-MM-DD)"
-          },
-          "country": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country",
-            "description": "Country of document (e.g. YE, SA)"
-          },
-          "nationality": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nationality",
-            "description": "Nationality (e.g. Yemeni, Saudi)"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id_card",
-          "selfie"
-        ],
-        "title": "Body_verify_kyc_api_v1_kyc_verify_post"
-      },
-      "CreditScoreResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "user_id": {
-            "type": "integer",
-            "title": "User Id"
-          },
-          "score": {
-            "type": "integer",
-            "maximum": 850.0,
-            "minimum": 300.0,
-            "title": "Score"
-          },
-          "risk_level": {
-            "$ref": "#/components/schemas/RiskLevel"
-          },
-          "signals": {
-            "$ref": "#/components/schemas/SignalResponse"
-          },
-          "insights": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Insights"
-          },
-          "transactions_summary": {
-            "$ref": "#/components/schemas/TransactionsSummary"
-          },
-          "data_quality": {
-            "$ref": "#/components/schemas/DataQuality"
-          },
-          "transaction_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transaction Count"
-          },
-          "upload_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Upload Id"
-          },
-          "computed_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Computed At"
-          },
-          "score_band": {
-            "type": "string",
-            "title": "Score Band",
-            "description": "Human-readable score band label.",
-            "readOnly": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "user_id",
-          "score",
-          "risk_level",
-          "signals",
-          "insights",
-          "transactions_summary",
-          "data_quality",
-          "computed_at",
-          "score_band"
-        ],
-        "title": "CreditScoreResponse"
-      },
-      "DataQuality": {
-        "type": "string",
-        "enum": [
-          "good",
-          "low_data",
-          "insufficient"
-        ],
-        "title": "DataQuality"
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "title": "HTTPValidationError"
-      },
-      "IDType": {
-        "type": "string",
-        "enum": [
-          "national_id",
-          "passport",
-          "drivers_license",
-          "residence_permit"
-        ],
-        "title": "IDType"
-      },
-      "KYCAdminResponse": {
-        "properties": {
-          "id_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Id Type"
-          },
-          "id_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Id Number"
-          },
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "user_id": {
-            "type": "integer",
-            "title": "User Id"
-          },
-          "status": {
-            "$ref": "#/components/schemas/KYCStatus"
-          },
-          "nationality": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nationality"
-          },
-          "country": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country"
-          },
-          "full_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Full Name"
-          },
-          "dob": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dob"
-          },
-          "gender": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gender"
-          },
-          "document_expires_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Document Expires At"
-          },
-          "document_issued_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Document Issued At"
-          },
-          "face_match_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Face Match Score"
-          },
-          "liveness_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Liveness Score"
-          },
-          "liveness_details": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LivenessDetails"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "authenticity_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Authenticity Score"
-          },
-          "rejection_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rejection Reason"
-          },
-          "attempt_count": {
-            "type": "integer",
-            "title": "Attempt Count",
-            "default": 0
-          },
-          "id_image_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Id Image Url"
-          },
-          "selfie_image_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Selfie Image Url"
-          },
-          "expires_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires At"
-          },
-          "reviewer_note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewer Note"
-          },
-          "reviewed_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed At"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          },
-          "ocr_data": {
-            "anyOf": [
-              {},
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ocr Data"
-          },
-          "is_expired": {
-            "type": "boolean",
-            "title": "Is Expired",
-            "readOnly": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "user_id",
-          "status",
-          "created_at",
-          "is_expired"
-        ],
-        "title": "KYCAdminResponse",
-        "description": "Admin response \u2014 includes raw OCR data."
-      },
-      "KYCAdminReviewRequest": {
-        "properties": {
-          "approved": {
-            "type": "boolean",
-            "title": "Approved"
-          },
-          "note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note",
-            "default": "Manual admin review"
-          }
-        },
-        "type": "object",
-        "required": [
-          "approved"
-        ],
-        "title": "KYCAdminReviewRequest"
-      },
-      "KYCListResponse": {
-        "properties": {
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "page": {
-            "type": "integer",
-            "title": "Page"
-          },
-          "page_size": {
-            "type": "integer",
-            "title": "Page Size"
-          },
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/KYCAdminResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "total",
-          "page",
-          "page_size",
-          "items"
-        ],
-        "title": "KYCListResponse"
-      },
-      "KYCResponse": {
-        "properties": {
-          "id_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Id Type"
-          },
-          "id_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Id Number"
-          },
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "user_id": {
-            "type": "integer",
-            "title": "User Id"
-          },
-          "status": {
-            "$ref": "#/components/schemas/KYCStatus"
-          },
-          "nationality": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nationality"
-          },
-          "country": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country"
-          },
-          "full_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Full Name"
-          },
-          "dob": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dob"
-          },
-          "gender": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gender"
-          },
-          "document_expires_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Document Expires At"
-          },
-          "document_issued_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Document Issued At"
-          },
-          "face_match_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Face Match Score"
-          },
-          "liveness_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Liveness Score"
-          },
-          "liveness_details": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LivenessDetails"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "authenticity_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Authenticity Score"
-          },
-          "rejection_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rejection Reason"
-          },
-          "attempt_count": {
-            "type": "integer",
-            "title": "Attempt Count",
-            "default": 0
-          },
-          "id_image_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Id Image Url"
-          },
-          "selfie_image_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Selfie Image Url"
-          },
-          "expires_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires At"
-          },
-          "reviewer_note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewer Note"
-          },
-          "reviewed_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed At"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          },
-          "is_expired": {
-            "type": "boolean",
-            "title": "Is Expired",
-            "readOnly": true
-          },
-          "verification_summary": {
-            "type": "string",
-            "title": "Verification Summary",
-            "description": "Human-readable one-line summary of the verification result.",
-            "readOnly": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "user_id",
-          "status",
-          "created_at",
-          "is_expired",
-          "verification_summary"
-        ],
-        "title": "KYCResponse",
-        "description": "End-user response \u2014 no raw OCR data."
-      },
-      "KYCStatus": {
-        "type": "string",
-        "enum": [
-          "pending",
-          "verified",
-          "rejected",
-          "resubmitted"
-        ],
-        "title": "KYCStatus"
-      },
-      "LivenessDetails": {
-        "properties": {
-          "sharpness_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sharpness Score"
-          },
-          "frequency_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Frequency Score"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          }
-        },
-        "type": "object",
-        "title": "LivenessDetails"
-      },
-      "OTPResponse": {
-        "properties": {
-          "message": {
-            "type": "string",
-            "title": "Message"
-          },
-          "phone_number": {
-            "type": "string",
-            "title": "Phone Number"
-          },
-          "expires_in": {
-            "type": "integer",
-            "title": "Expires In",
-            "default": 300
-          }
-        },
-        "type": "object",
-        "required": [
-          "message",
-          "phone_number"
-        ],
-        "title": "OTPResponse"
-      },
-      "OnboardingStatus": {
-        "properties": {
-          "onboarding_step": {
-            "type": "integer",
-            "title": "Onboarding Step"
-          },
-          "phone_verified": {
-            "type": "boolean",
-            "title": "Phone Verified"
-          },
-          "kyc_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Kyc Status"
-          },
-          "credit_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Credit Status"
-          },
-          "next_step": {
-            "type": "string",
-            "title": "Next Step"
-          },
-          "next_step_url": {
-            "type": "string",
-            "title": "Next Step Url"
-          }
-        },
-        "type": "object",
-        "required": [
-          "onboarding_step",
-          "phone_verified",
-          "next_step",
-          "next_step_url"
-        ],
-        "title": "OnboardingStatus",
-        "description": "Returned by GET /users/me/onboarding-status"
-      },
-      "ParsedTransactionCorrection": {
-        "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 255,
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "amount": {
-            "anyOf": [
-              {
-                "type": "number",
-                "exclusiveMinimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Amount"
-          },
-          "currency": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 3,
-                "minLength": 3
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Currency"
-          },
-          "type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ParsedTransactionTypeSchema"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "category": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Category"
-          },
-          "transaction_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transaction Date"
-          }
-        },
-        "type": "object",
-        "title": "ParsedTransactionCorrection",
-        "description": "Allows a user to correct a misparse. All fields optional \u2014\nonly provided fields are updated. Triggers score recomputation."
-      },
-      "ParsedTransactionListResponse": {
-        "properties": {
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "page": {
-            "type": "integer",
-            "title": "Page"
-          },
-          "page_size": {
-            "type": "integer",
-            "title": "Page Size"
-          },
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ParsedTransactionResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "total",
-          "page",
-          "page_size",
-          "items"
-        ],
-        "title": "ParsedTransactionListResponse"
-      },
-      "ParsedTransactionResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "user_id": {
-            "type": "integer",
-            "title": "User Id"
-          },
-          "upload_id": {
-            "type": "string",
-            "title": "Upload Id"
-          },
-          "raw_line": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Raw Line"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "amount": {
-            "type": "number",
-            "title": "Amount"
-          },
-          "currency": {
-            "type": "string",
-            "title": "Currency"
-          },
-          "normalized_amount": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Normalized Amount"
-          },
-          "type": {
-            "$ref": "#/components/schemas/ParsedTransactionTypeSchema"
-          },
-          "category": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Category"
-          },
-          "transaction_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transaction Date"
-          },
-          "confidence": {
-            "type": "number",
-            "title": "Confidence"
-          },
-          "needs_review": {
-            "type": "boolean",
-            "title": "Needs Review"
-          },
-          "source": {
-            "$ref": "#/components/schemas/ParsedTransactionSourceSchema"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          },
-          "is_income": {
-            "type": "boolean",
-            "title": "Is Income",
-            "readOnly": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "user_id",
-          "upload_id",
-          "description",
-          "amount",
-          "currency",
-          "type",
-          "confidence",
-          "needs_review",
-          "source",
-          "created_at",
-          "is_income"
-        ],
-        "title": "ParsedTransactionResponse"
-      },
-      "ParsedTransactionSourceSchema": {
-        "type": "string",
-        "enum": [
-          "ocr_upload",
-          "manual"
-        ],
-        "title": "ParsedTransactionSourceSchema"
-      },
-      "ParsedTransactionTypeSchema": {
-        "type": "string",
-        "enum": [
-          "income",
-          "expense",
-          "unknown"
-        ],
-        "title": "ParsedTransactionTypeSchema"
-      },
-      "RiskLevel": {
-        "type": "string",
-        "enum": [
-          "trusted",
-          "moderate",
-          "risky"
-        ],
-        "title": "RiskLevel"
-      },
-      "SendOTPRequest": {
-        "properties": {
-          "phone_number": {
-            "type": "string",
-            "title": "Phone Number"
-          },
-          "country_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country Code"
-          }
-        },
-        "type": "object",
-        "required": [
-          "phone_number"
-        ],
-        "title": "SendOTPRequest"
-      },
-      "SignalResponse": {
-        "properties": {
-          "income_level": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 100.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Income Level",
-            "description": "Total income normalised 0\u2013100"
-          },
-          "income_stability": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 100.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Income Stability",
-            "description": "Inverse of income variance 0\u2013100"
-          },
-          "savings_rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Savings Rate",
-            "description": "(income - expenses) / income \u00d7 100"
-          },
-          "activity": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 100.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Activity",
-            "description": "Transaction frequency 0\u2013100"
-          },
-          "burden": {
-            "anyOf": [
-              {
-                "type": "number",
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Burden",
-            "description": "Expense ratio % (lower = better)"
-          }
-        },
-        "type": "object",
-        "title": "SignalResponse",
-        "description": "The five normalised signals (0\u2013100) that feed the scoring engine.\nHigher is always better except for `burden` (lower burden = healthier)."
-      },
-      "TransactionResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "sender_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sender Id"
-          },
-          "receiver_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Receiver Id"
-          },
-          "amount": {
-            "type": "number",
-            "title": "Amount"
-          },
-          "currency": {
-            "type": "string",
-            "title": "Currency"
-          },
-          "fx_rate": {
-            "type": "number",
-            "title": "Fx Rate"
-          },
-          "converted_amount": {
-            "type": "number",
-            "title": "Converted Amount"
-          },
-          "target_currency": {
-            "type": "string",
-            "title": "Target Currency"
-          },
-          "type": {
-            "$ref": "#/components/schemas/TransactionTypeSchema"
-          },
-          "status": {
-            "$ref": "#/components/schemas/TransactionStatusSchema"
-          },
-          "reference": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reference"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "amount",
-          "currency",
-          "fx_rate",
-          "converted_amount",
-          "target_currency",
-          "type",
-          "status",
-          "created_at"
-        ],
-        "title": "TransactionResponse"
-      },
-      "TransactionStatusSchema": {
-        "type": "string",
-        "enum": [
-          "pending",
-          "completed",
-          "failed"
-        ],
-        "title": "TransactionStatusSchema"
-      },
-      "TransactionTypeSchema": {
-        "type": "string",
-        "enum": [
-          "transfer",
-          "topup",
-          "withdraw"
-        ],
-        "title": "TransactionTypeSchema"
-      },
-      "TransactionsSummary": {
-        "properties": {
-          "total_income": {
-            "type": "number",
-            "title": "Total Income"
-          },
-          "total_expenses": {
-            "type": "number",
-            "title": "Total Expenses"
-          },
-          "net": {
-            "type": "number",
-            "title": "Net"
-          },
-          "transaction_count": {
-            "type": "integer",
-            "title": "Transaction Count"
-          },
-          "top_categories": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "type": "object",
-            "title": "Top Categories",
-            "description": "Category \u2192 total amount (top 5)"
-          }
-        },
-        "type": "object",
-        "required": [
-          "total_income",
-          "total_expenses",
-          "net",
-          "transaction_count"
-        ],
-        "title": "TransactionsSummary"
-      },
-      "UploadStatementResponse": {
-        "properties": {
-          "upload_id": {
-            "type": "string",
-            "title": "Upload Id"
-          },
-          "row_count": {
-            "type": "integer",
-            "title": "Row Count",
-            "description": "Total transaction rows extracted"
-          },
-          "needs_review_count": {
-            "type": "integer",
-            "title": "Needs Review Count",
-            "description": "Rows flagged for human review"
-          },
-          "score": {
-            "$ref": "#/components/schemas/CreditScoreResponse"
-          }
-        },
-        "type": "object",
-        "required": [
-          "upload_id",
-          "row_count",
-          "needs_review_count",
-          "score"
-        ],
-        "title": "UploadStatementResponse"
-      },
-      "User": {
-        "properties": {
-          "phone_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone Number"
-          },
-          "full_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Full Name"
-          },
-          "country_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country Code"
-          },
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "firebase_uid": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Firebase Uid"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "is_active": {
-            "type": "boolean",
-            "title": "Is Active"
-          },
-          "is_admin": {
-            "type": "boolean",
-            "title": "Is Admin"
-          },
-          "phone_verified": {
-            "type": "boolean",
-            "title": "Phone Verified",
-            "default": false
-          },
-          "onboarding_step": {
-            "type": "integer",
-            "title": "Onboarding Step",
-            "default": 0
-          },
-          "wallet_balance": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Wallet Balance"
-          },
-          "kyc_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Kyc Status"
-          },
-          "credit_score": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Credit Score"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "is_active",
-          "is_admin",
-          "created_at"
-        ],
-        "title": "User"
-      },
-      "UserUpdate": {
-        "properties": {
-          "email": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "email"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "phone_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone Number"
-          },
-          "full_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Full Name"
-          },
-          "country_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country Code"
-          },
-          "is_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Active"
-          }
-        },
-        "type": "object",
-        "title": "UserUpdate",
-        "description": "All fields optional \u2014 only provided fields are updated."
-      },
-      "ValidationError": {
-        "properties": {
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
+        {
+          "name": "[Admin] List All Users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/users?skip=0&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "skip",      "value": "0"    },
+                { "key": "limit",     "value": "20"   },
+                { "key": "email",     "value": "",     "disabled": true },
+                { "key": "phone",     "value": "",     "disabled": true },
+                { "key": "is_active", "value": "true", "disabled": true }
               ]
             },
-            "type": "array",
-            "title": "Location"
-          },
-          "msg": {
-            "type": "string",
-            "title": "Message"
-          },
-          "type": {
-            "type": "string",
-            "title": "Error Type"
+            "description": "Admin only. Paginated, filterable user list."
           }
         },
-        "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError"
-      },
-      "VerifyOTPRequest": {
-        "properties": {
-          "phone_number": {
-            "type": "string",
-            "title": "Phone Number"
-          },
-          "otp_code": {
-            "type": "string",
-            "title": "Otp Code"
-          },
-          "full_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+        {
+          "name": "[Admin] Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": { "raw": "{{base_url}}/users/{{user_id}}", "host": ["{{base_url}}"], "path": ["users","{{user_id}}"] },
+            "description": "Admin only. Returns any user's profile by internal ID."
+          }
+        },
+        {
+          "name": "[Admin] Update Any User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
             ],
-            "title": "Full Name"
-          },
-          "country_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country Code"
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": true,\n  \"is_admin\": false\n}"
+            },
+            "url": { "raw": "{{base_url}}/users/{{user_id}}", "host": ["{{base_url}}"], "path": ["users","{{user_id}}"] },
+            "description": "Admin only. Update any user's profile or status flags."
           }
-        },
-        "type": "object",
-        "required": [
-          "phone_number",
-          "otp_code"
-        ],
-        "title": "VerifyOTPRequest"
-      },
-      "WalletResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "user_id": {
-            "type": "integer",
-            "title": "User Id"
-          },
-          "balance": {
-            "type": "number",
-            "title": "Balance"
-          },
-          "currency": {
-            "type": "string",
-            "title": "Currency"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "user_id",
-          "balance",
-          "currency",
-          "created_at"
-        ],
-        "title": "WalletResponse"
-      },
-      "WalletTopUpRequest": {
-        "properties": {
-          "amount": {
-            "type": "number",
-            "exclusiveMinimum": 0.0,
-            "title": "Amount",
-            "description": "Amount to add to wallet"
-          }
-        },
-        "type": "object",
-        "required": [
-          "amount"
-        ],
-        "title": "WalletTopUpRequest"
-      },
-      "WalletTransferRequest": {
-        "properties": {
-          "to_user_id": {
-            "type": "integer",
-            "title": "To User Id"
-          },
-          "amount": {
-            "type": "number",
-            "exclusiveMinimum": 0.0,
-            "title": "Amount",
-            "description": "Amount to transfer (must be positive)"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          }
-        },
-        "type": "object",
-        "required": [
-          "to_user_id",
-          "amount"
-        ],
-        "title": "WalletTransferRequest"
-      },
-      "WalletWithdrawRequest": {
-        "properties": {
-          "amount": {
-            "type": "number",
-            "exclusiveMinimum": 0.0,
-            "title": "Amount",
-            "description": "Amount to withdraw"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description",
-            "default": "Wallet Withdrawal"
-          }
-        },
-        "type": "object",
-        "required": [
-          "amount"
-        ],
-        "title": "WalletWithdrawRequest"
-      }
+        }
+      ]
     },
-    "securitySchemes": {
-      "HTTPBearer": {
-        "type": "http",
-        "scheme": "bearer"
-      }
+
+    {
+      "name": "💰 Wallet",
+      "item": [
+        {
+          "name": "Get Wallet Balance",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/wallet/balance", "host": ["{{base_url}}"], "path": ["wallet","balance"] },
+            "description": "Returns wallet balance and currency."
+          }
+        },
+        {
+          "name": "Top Up Wallet (Simulated)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500.00\n}"
+            },
+            "url": { "raw": "{{base_url}}/wallet/topup", "host": ["{{base_url}}"], "path": ["wallet","topup"] },
+            "description": "Simulated top-up. Replace with real payment gateway in production."
+          }
+        },
+        {
+          "name": "Transfer Funds",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to_user_id\": 2,\n  \"amount\": 100.00,\n  \"description\": \"Payment for services\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/wallet/transfer", "host": ["{{base_url}}"], "path": ["wallet","transfer"] },
+            "description": "Transfers funds to another user by their ID."
+          }
+        },
+        {
+          "name": "Withdraw Funds",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50.00,\n  \"description\": \"ATM withdrawal\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/wallet/withdraw", "host": ["{{base_url}}"], "path": ["wallet","withdraw"] },
+            "description": "Executes a withdrawal from the user's wallet."
+          }
+        },
+        {
+          "name": "Get Transaction History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/wallet/history", "host": ["{{base_url}}"], "path": ["wallet","history"] },
+            "description": "Returns full wallet transaction history."
+          }
+        },
+        {
+          "name": "Get Transaction Details",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/wallet/transactions/{{tx_id}}", "host": ["{{base_url}}"], "path": ["wallet","transactions","{{tx_id}}"] },
+            "description": "Fetches details for a specific wallet transaction."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🪪 KYC — User",
+      "item": [
+        {
+          "name": "Submit KYC Verification",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "id_card",    "type": "file",  "description": "Government-issued ID photo (JPEG/PNG/WebP, max 10MB)" },
+                { "key": "selfie",     "type": "file",  "description": "Live selfie photo" },
+                { "key": "id_type",    "type": "text",  "value": "national_id", "description": "national_id | passport | driving_license | residence_permit" },
+                { "key": "full_name",  "type": "text",  "value": "", "disabled": true, "description": "Manual override — Full name as on document" },
+                { "key": "id_number",  "type": "text",  "value": "", "disabled": true, "description": "Manual override — ID/Passport number" },
+                { "key": "issue_date", "type": "text",  "value": "", "disabled": true, "description": "Manual override — YYYY-MM-DD" },
+                { "key": "expiry_date","type": "text",  "value": "", "disabled": true, "description": "Manual override — YYYY-MM-DD" },
+                { "key": "country",    "type": "text",  "value": "", "disabled": true, "description": "Manual override — e.g. YE, SA" },
+                { "key": "nationality","type": "text",  "value": "", "disabled": true, "description": "Manual override — e.g. Yemeni" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/kyc/verify", "host": ["{{base_url}}"], "path": ["kyc","verify"] },
+            "description": "Step 2 — Upload ID + selfie. OCR, liveness, and face match are run automatically. Manual fields override OCR when provided."
+          }
+        },
+        {
+          "name": "Resubmit KYC (after rejection)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "id_card", "type": "file", "description": "Updated ID photo" },
+                { "key": "selfie",  "type": "file", "description": "New selfie" },
+                { "key": "id_type", "type": "text", "value": "national_id" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/kyc/resubmit", "host": ["{{base_url}}"], "path": ["kyc","resubmit"] },
+            "description": "Re-attempt after REJECTED status. Capped by KYC_MAX_RESUBMISSIONS."
+          }
+        },
+        {
+          "name": "Get KYC Status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/kyc/status", "host": ["{{base_url}}"], "path": ["kyc","status"] },
+            "description": "Returns most recent active KYC record."
+          }
+        },
+        {
+          "name": "Get KYC History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/kyc/history", "host": ["{{base_url}}"], "path": ["kyc","history"] },
+            "description": "Returns all past KYC attempts including rejections."
+          }
+        },
+        {
+          "name": "Debug: Inspect OCR Output (ID)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "id_card", "type": "file", "description": "ID image to inspect" },
+                { "key": "id_type", "type": "text", "value": "national_id" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/kyc/debug-ocr", "host": ["{{base_url}}"], "path": ["kyc","debug-ocr"] },
+            "description": "Runs OCR on ID image and returns raw tokens, field extraction, MRZ. No data saved."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛡️ Admin — KYC",
+      "item": [
+        {
+          "name": "[Admin] List KYC Applications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/kyc/list?page=1&page_size=20",
+              "host": ["{{base_url}}"],
+              "path": ["admin","kyc","list"],
+              "query": [
+                { "key": "page",         "value": "1"  },
+                { "key": "page_size",    "value": "20" },
+                { "key": "status",       "value": "",   "disabled": true, "description": "pending | verified | rejected | resubmitted" },
+                { "key": "expired_only", "value": "false", "disabled": true },
+                { "key": "user_id",      "value": "",   "disabled": true },
+                { "key": "id_number",    "value": "",   "disabled": true, "description": "Partial ID number search" }
+              ]
+            },
+            "description": "Paginated, filterable KYC application list."
+          }
+        },
+        {
+          "name": "[Admin] Submit Manual KYC Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"note\": \"Documents verified manually. All checks passed.\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/admin/kyc/{{user_id}}/review", "host": ["{{base_url}}"], "path": ["admin","kyc","{{user_id}}","review"] },
+            "description": "Manually approve or reject a KYC application. Set `approved: false` to reject."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📊 Credit Scoring — User",
+      "item": [
+        {
+          "name": "List Supported Currencies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/credit/currencies", "host": ["{{base_url}}"], "path": ["credit","currencies"] },
+            "description": "Returns all currencies supported for financial document processing with exchange rates. No auth required."
+          }
+        },
+        {
+          "name": "Upload Financial Documents (Step 3)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "files",        "type": "file", "description": "Bank statement image/PDF/CSV/TXT (max 25MB each). Add multiple `files` entries for batch." },
+                { "key": "user_country", "type": "text", "value": "YE", "disabled": true, "description": "ISO country code for currency conversion (e.g. YE, SA, TR)" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/credit/upload", "host": ["{{base_url}}"], "path": ["credit","upload"] },
+            "description": "Step 3 — Upload one or more bank statements. OCR + transaction parsing + credit scoring runs automatically."
+          }
+        },
+        {
+          "name": "Get Latest Credit Score",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/credit/score", "host": ["{{base_url}}"], "path": ["credit","score"] },
+            "description": "Returns the most recent active credit score with signals and insights."
+          }
+        },
+        {
+          "name": "List Parsed Transactions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/credit/transactions?page=1&page_size=20",
+              "host": ["{{base_url}}"],
+              "path": ["credit","transactions"],
+              "query": [
+                { "key": "page",         "value": "1"  },
+                { "key": "page_size",    "value": "20" },
+                { "key": "type",         "value": "",   "disabled": true, "description": "income | expense | unknown" },
+                { "key": "needs_review", "value": "",   "disabled": true, "description": "true | false" }
+              ]
+            },
+            "description": "Paginated parsed transactions. Filter by type or review flag."
+          }
+        },
+        {
+          "name": "Get Transactions Flagged for Review",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/credit/transactions/review", "host": ["{{base_url}}"], "path": ["credit","transactions","review"] },
+            "description": "Returns all transactions that need human review (needs_review=true)."
+          }
+        },
+        {
+          "name": "Correct a Parsed Transaction",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1500.00,\n  \"description\": \"Salary payment\",\n  \"type\": \"income\",\n  \"category\": \"salary\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/credit/transactions/{{tx_id}}/correct", "host": ["{{base_url}}"], "path": ["credit","transactions","{{tx_id}}","correct"] },
+            "description": "Fix a misparse. Triggers automatic score recomputation. Returns updated CreditScoreResponse."
+          }
+        },
+        {
+          "name": "Debug: Inspect OCR + Parser Output",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "statement", "type": "file", "description": "Bank statement image to inspect" }
+              ]
+            },
+            "url": { "raw": "{{base_url}}/credit/debug-ocr", "host": ["{{base_url}}"], "path": ["credit","debug-ocr"] },
+            "description": "Inspect OCR tokens and transaction parser classification. No DB writes."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛡️ Admin — Credit",
+      "item": [
+        {
+          "name": "[Admin] List All Credit Scores",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/credit/list?page=1&page_size=20",
+              "host": ["{{base_url}}"],
+              "path": ["admin","credit","list"],
+              "query": [
+                { "key": "page",       "value": "1"  },
+                { "key": "page_size",  "value": "20" },
+                { "key": "risk_level", "value": "",   "disabled": true, "description": "trusted | moderate | risky" }
+              ]
+            },
+            "description": "Paginated list of all users' active credit scores. Filter by risk_level."
+          }
+        },
+        {
+          "name": "[Admin] Get User's Transactions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/credit/users/{{user_id}}/transactions?page=1&page_size=20",
+              "host": ["{{base_url}}"],
+              "path": ["admin","credit","users","{{user_id}}","transactions"],
+              "query": [
+                { "key": "page",      "value": "1"  },
+                { "key": "page_size", "value": "20" }
+              ]
+            },
+            "description": "Admin view of any user's parsed transactions."
+          }
+        },
+        {
+          "name": "[Admin] Force Recompute Credit Score",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": { "raw": "{{base_url}}/admin/credit/users/{{user_id}}/rescore", "host": ["{{base_url}}"], "path": ["admin","credit","users","{{user_id}}","rescore"] },
+            "description": "Recomputes credit score from all existing parsed transactions."
+          }
+        },
+        {
+          "name": "[Admin] Global Review Queue",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/credit/review-queue?page=1&page_size=20",
+              "host": ["{{base_url}}"],
+              "path": ["admin","credit","review-queue"],
+              "query": [
+                { "key": "page",      "value": "1"  },
+                { "key": "page_size", "value": "20" }
+              ]
+            },
+            "description": "All needs_review=true rows across ALL users."
+          }
+        },
+        {
+          "name": "[Admin] Resolve a Flagged Transaction",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/admin/credit/transactions/{{tx_id}}/resolve",
+              "host": ["{{base_url}}"],
+              "path": ["admin","credit","transactions","{{tx_id}}","resolve"],
+              "query": [
+                { "key": "correct_type",     "value": "income", "disabled": true, "description": "income | expense | unknown" },
+                { "key": "correct_category", "value": "",       "disabled": true }
+              ]
+            },
+            "description": "Mark a needs_review row as resolved. Optionally correct type/category."
+          }
+        }
+      ]
     }
-  }
+
+  ]
 }
