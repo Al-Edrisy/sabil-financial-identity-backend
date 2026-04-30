@@ -50,7 +50,7 @@ _statement_reader_arabic = None  # en + ar  (Arabic-script backbone)
 
 
 def get_ocr_reader():
-    """KYC reader: English + Arabic."""
+    """KYC reader: English + Arabic. Returns None if unavailable or broken."""
     global _reader
     if _reader is None:
         try:
@@ -60,6 +60,22 @@ def get_ocr_reader():
         except ImportError:
             logger.error("EasyOCR not installed. Run: pip install easyocr")
             return None
+        except Exception as exc:
+            logger.error(f"EasyOCR reader init failed: {exc}")
+            return None
+    # Runtime check: verify torch+numpy ABI is compatible by doing a tiny readtext
+    # We can't just import numpy — numpy itself is fine, it's torch's C extension
+    # that breaks when numpy 2.x is present but torch was compiled for numpy 1.x.
+    # The failure manifests as "Numpy is not available" inside readtext().
+    # We detect this by checking torch's numpy bridge directly.
+    try:
+        import torch
+        import numpy as _np
+        t = torch.tensor([1.0])
+        _ = t.numpy()   # this will raise if torch/numpy ABI is broken
+    except Exception as torch_err:
+        logger.warning(f"EasyOCR runtime check: torch/numpy ABI broken ({torch_err}) — using Tesseract")
+        return None
     return _reader
 
 
@@ -73,6 +89,8 @@ def get_statement_ocr_reader():
     Solution: two readers, both run on every image, results merged by score.
       - latin_reader:  ["en", "tr"]  — handles English + Turkish
       - arabic_reader: ["en", "ar"]  — handles English + Arabic
+
+    Returns (None, None) if EasyOCR is unavailable or broken at runtime.
     """
     global _statement_reader_latin, _statement_reader_arabic
     try:
@@ -83,8 +101,20 @@ def get_statement_ocr_reader():
         if _statement_reader_arabic is None:
             _statement_reader_arabic = easyocr.Reader(["en", "ar"], gpu=False)
             logger.info("EasyOCR statement reader (en + ar) initialised.")
+        # Quick runtime check — verify torch/numpy ABI is compatible
+        try:
+            import torch
+            import numpy as _np
+            t = torch.tensor([1.0])
+            _ = t.numpy()
+        except Exception as torch_err:
+            logger.warning(f"EasyOCR runtime check: torch/numpy ABI broken ({torch_err}) — returning None readers")
+            return None, None
     except ImportError:
         logger.error("EasyOCR not installed. Run: pip install easyocr")
+        return None, None
+    except Exception as exc:
+        logger.error(f"EasyOCR reader init failed: {exc}")
         return None, None
     return _statement_reader_latin, _statement_reader_arabic
 
@@ -141,18 +171,20 @@ def extract_text_from_id(image_bytes: bytes, id_type: str = "national_id") -> di
     """
     Full OCR pipeline for a KYC identity document.
     Uses multi-variant preprocessing to maximise extraction quality.
-    Falls back to Tesseract if EasyOCR is not installed.
+    Falls back to Tesseract if EasyOCR is not installed or fails at runtime.
     """
     reader = get_ocr_reader()
     if not reader:
-        # Fallback: Tesseract
         return _extract_text_from_id_tesseract(image_bytes, id_type)
 
     try:
         all_results = _run_ocr_best_variant(reader, image_bytes)
 
+        # If EasyOCR returned nothing (e.g. NumPy version conflict at runtime),
+        # fall back to Tesseract rather than returning an empty result.
         if not all_results:
-            return {"error": "Failed to decode or process image"}
+            logger.warning("EasyOCR returned no results — falling back to Tesseract")
+            return _extract_text_from_id_tesseract(image_bytes, id_type)
 
         accepted   = [res for res in all_results if res[2] >= OCR_MIN_CONFIDENCE]
         raw_texts  = [res[1] for res in accepted]
@@ -176,7 +208,12 @@ def extract_text_from_id(image_bytes: bytes, id_type: str = "national_id") -> di
         mrz = parse_mrz(raw_texts)
         if mrz:
             extracted["mrz"]         = mrz
-            extracted["full_name"]   = mrz.get("mrz_full_name")   or extracted.get("full_name")
+            mrz_name = mrz.get("mrz_full_name")
+            if mrz_name and len(mrz_name) < 60 and not any(
+                word in mrz_name.lower()
+                for word in ("passport", "country", "code", "type", "no.", "state")
+            ):
+                extracted["full_name"] = mrz_name or extracted.get("full_name")
             extracted["id_number"]   = mrz.get("mrz_doc_number")  or extracted.get("id_number")
             extracted["dob"]         = mrz.get("mrz_dob")         or extracted.get("dob")
             extracted["expiry_date"] = mrz.get("mrz_expiry")      or extracted.get("expiry_date")
@@ -195,8 +232,8 @@ def extract_text_from_id(image_bytes: bytes, id_type: str = "national_id") -> di
         return extracted
 
     except Exception as exc:
-        logger.error(f"OCR processing failed: {exc}", exc_info=True)
-        return {"error": str(exc)}
+        logger.error(f"EasyOCR processing failed: {exc} — falling back to Tesseract")
+        return _extract_text_from_id_tesseract(image_bytes, id_type)
 
 
 def _extract_text_from_id_tesseract(image_bytes: bytes, id_type: str = "national_id") -> dict:
@@ -227,18 +264,31 @@ def _extract_text_from_id_tesseract(image_bytes: bytes, id_type: str = "national
         if pil_img is None:
             return {"error": "Could not decode image"}
 
-        # Try multilingual OCR
-        raw_text = []
-        for lang in ["eng+ara", "eng+tur", "eng"]:
-            try:
-                text = pytesseract.image_to_string(pil_img, lang=lang, config='--psm 6')
-                lines = [l.strip() for l in text.split('\n') if l.strip()]
-                if lines:
-                    raw_text = lines
-                    logger.info(f"Tesseract KYC OCR ({lang}): {len(lines)} lines")
-                    break
-            except Exception:
-                continue
+        # Try multiple PSM modes and pick the one with the most useful lines.
+        # PSM 6 = uniform block of text (best for passports with MRZ)
+        # PSM 3 = fully automatic (good for mixed layouts)
+        # PSM 11 = sparse text (catches individual fields)
+        best_lines = []
+        best_score = 0
+        for lang in ["eng+ara", "eng"]:
+            for psm in [6, 3]:
+                try:
+                    text = pytesseract.image_to_string(
+                        pil_img, lang=lang, config=f'--psm {psm}'
+                    )
+                    lines = [l.strip() for l in text.split('\n') if l.strip()]
+                    # Score: prefer more lines with longer content
+                    score = sum(len(l) for l in lines if len(l) > 3)
+                    if score > best_score:
+                        best_score = score
+                        best_lines = lines
+                        logger.info(f"Tesseract KYC OCR ({lang}, psm={psm}): {len(lines)} lines, score={score}")
+                except Exception:
+                    continue
+            if best_lines:
+                break   # found good results with this language
+
+        raw_text = best_lines
 
         if not raw_text:
             return {"error": "Tesseract OCR returned no text"}
@@ -253,7 +303,14 @@ def _extract_text_from_id_tesseract(image_bytes: bytes, id_type: str = "national
         mrz = parse_mrz(raw_text)
         if mrz:
             extracted["mrz"]         = mrz
-            extracted["full_name"]   = mrz.get("mrz_full_name")   or extracted.get("full_name")
+            # Only use MRZ name if it looks like a real name (no OCR noise)
+            # A valid MRZ name contains only letters, spaces, and is < 60 chars
+            mrz_name = mrz.get("mrz_full_name")
+            if mrz_name and len(mrz_name) < 60 and not any(
+                word in mrz_name.lower()
+                for word in ("passport", "country", "code", "type", "no.", "state")
+            ):
+                extracted["full_name"] = mrz_name or extracted.get("full_name")
             extracted["id_number"]   = mrz.get("mrz_doc_number")  or extracted.get("id_number")
             extracted["dob"]         = mrz.get("mrz_dob")         or extracted.get("dob")
             extracted["expiry_date"] = mrz.get("mrz_expiry")      or extracted.get("expiry_date")

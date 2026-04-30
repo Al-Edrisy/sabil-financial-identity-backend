@@ -91,11 +91,11 @@ def compute_score(signals: SignalResult) -> int:
 
     The burden signal is inverted (lower burden = higher contribution)
     before applying weights.
-    """
-    if signals.data_quality == "insufficient":
-        # Not enough data to score — return floor
-        return _SCORE_MIN
 
+    For `insufficient` data quality, we still compute a partial score
+    from whatever signals are available, but cap it at 550 (midpoint)
+    to reflect the limited data confidence.
+    """
     # Clamp all signals to [0, 100]
     def _c(v: float) -> float:
         return max(0.0, min(100.0, v))
@@ -114,7 +114,11 @@ def compute_score(signals: SignalResult) -> int:
     score = int(_SCORE_MIN + (raw / 100.0) * _SCORE_RANGE)
     score = max(_SCORE_MIN, min(_SCORE_MAX, score))
 
-    logger.info(f"scoring_service: raw={raw:.2f} → score={score}")
+    # Cap insufficient-data scores at 550 — reflects limited confidence
+    if signals.data_quality == "insufficient":
+        score = min(score, 550)
+
+    logger.info(f"scoring_service: raw={raw:.2f} → score={score} (quality={signals.data_quality})")
     return score
 
 
@@ -133,10 +137,24 @@ def generate_insights(signals: SignalResult, score: int) -> list[str]:
     Always returns at least one insight.
     """
     if signals.data_quality == "insufficient":
-        return [
-            "Insufficient transaction data to generate a reliable score. "
-            "Upload more statements to improve accuracy."
+        insights = [
+            "Limited transaction data — score is based on partial information. "
+            "Upload more statements for a more accurate score."
         ]
+        # Still add signal-based insights if we have any data
+        if signals.total_expenses > 0 and signals.total_income == 0:
+            insights.append(
+                "Only expense transactions detected. Upload income statements "
+                "(salary slips, bank credits) to improve your score."
+            )
+        if signals.total_income > 0:
+            for condition, message in _RULES:
+                try:
+                    if condition(signals):
+                        insights.append(message)
+                except Exception:
+                    pass
+        return insights[:4]
 
     insights: list[str] = []
     for condition, message in _RULES:

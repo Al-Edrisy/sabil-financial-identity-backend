@@ -220,19 +220,21 @@ class StatementService:
             return []
 
     def _normalize_to_user_currency(self, rows: list, user_country: Optional[str]) -> list:
-        """Convert all transaction amounts to the user's home currency."""
+        """
+        Log the user's home currency for context — but do NOT overwrite
+        normalized_usd. The DB always stores normalized_amount in USD so
+        the signal service can compare amounts across currencies correctly.
+
+        This method is kept for future display-currency conversion if needed.
+        """
         if not user_country:
             return rows
         home_currency = get_currency_for_country(user_country)
-        if home_currency == "USD":
-            return rows
-        for row in rows:
-            if row.currency != home_currency:
-                converted, rate = convert_currency(row.amount, row.currency, home_currency)
-                row.normalized_usd = converted
-                logger.debug(
-                    f"FX: {row.amount} {row.currency} -> {converted} {home_currency} (rate={rate})"
-                )
+        if home_currency != "USD":
+            logger.debug(
+                f"User country={user_country} → home currency={home_currency}. "
+                f"normalized_amount stored in USD for consistent scoring."
+            )
         return rows
 
     def _build_signal_input(self, rows: list) -> list:

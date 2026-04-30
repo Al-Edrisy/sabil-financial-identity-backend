@@ -173,6 +173,16 @@ def compute_signals(rows: list[dict]) -> SignalResult:
         # so the response isn't completely empty
         if total_income > 0:
             result.income_level = _normalise(total_income, settings.CREDIT_SCORE_INCOME_CAP)
+        if total_income > 0:
+            result.savings_rate = _clamp(
+                ((total_income - total_expenses) / total_income) * 100.0,
+                lo=-100.0, hi=100.0,
+            )
+            result.burden = _clamp((total_expenses / total_income) * 100.0, lo=0.0, hi=200.0)
+        elif total_expenses > 0:
+            result.burden = 100.0
+        avg_tx_per_month = result.transaction_count / max(months, 1)
+        result.activity = _normalise(avg_tx_per_month, _ACTIVITY_CAP)
         return result
     elif months < 2 or result.transaction_count < 5:
         result.data_quality = "low_data"

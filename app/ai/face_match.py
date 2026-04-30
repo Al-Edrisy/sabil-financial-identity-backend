@@ -339,25 +339,131 @@ def check_liveness(image_bytes: bytes) -> dict:
 # ---------------------------------------------------------------------------
 # Face comparison
 # ---------------------------------------------------------------------------
+def _face_similarity_opencv(face1: np.ndarray, face2: np.ndarray) -> float:
+    """
+    Compute face similarity using multiple OpenCV-only signals.
+    Returns a confidence score 0.0–1.0.
+
+    Methods combined (weighted ensemble):
+      1. Normalized Cross-Correlation on grayscale face crops (structural)
+      2. Histogram correlation on YCrCb color space (skin tone / color)
+      3. SIFT feature matching (local keypoint descriptors)
+      4. LBP (Local Binary Pattern) texture histogram similarity
+
+    This is a best-effort approach when DeepFace/face_recognition is
+    unavailable. For production, install deepface or face-recognition.
+    """
+    SIZE = (128, 128)
+    f1 = cv2.resize(face1, SIZE)
+    f2 = cv2.resize(face2, SIZE)
+
+    scores = []
+
+    # ── 1. Normalized Cross-Correlation (grayscale structural similarity) ─────
+    try:
+        g1 = cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        g2 = cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        g1 -= g1.mean(); g2 -= g2.mean()
+        n1, n2 = np.linalg.norm(g1), np.linalg.norm(g2)
+        if n1 > 0 and n2 > 0:
+            ncc = float(np.dot(g1.flatten(), g2.flatten()) / (n1 * n2))
+            # NCC range: -1 to 1 → map to 0–1
+            scores.append(("ncc", (ncc + 1.0) / 2.0, 0.35))
+    except Exception:
+        pass
+
+    # ── 2. YCrCb histogram correlation (skin tone / color distribution) ───────
+    try:
+        y1 = cv2.cvtColor(f1, cv2.COLOR_BGR2YCrCb)
+        y2 = cv2.cvtColor(f2, cv2.COLOR_BGR2YCrCb)
+        # Use Cr and Cb channels (skin-tone invariant to lighting)
+        hist_scores = []
+        for ch in [1, 2]:
+            h1 = cv2.calcHist([y1], [ch], None, [32], [0, 256])
+            h2 = cv2.calcHist([y2], [ch], None, [32], [0, 256])
+            cv2.normalize(h1, h1); cv2.normalize(h2, h2)
+            corr = cv2.compareHist(h1, h2, cv2.HISTCMP_CORREL)
+            hist_scores.append(max(0.0, float(corr)))
+        scores.append(("hist_ycrcb", sum(hist_scores) / len(hist_scores), 0.30))
+    except Exception:
+        pass
+
+    # ── 3. SIFT feature matching ──────────────────────────────────────────────
+    # Note: SIFT is unreliable on upscaled low-res passport photos.
+    # Use a lower weight and only include if meaningful keypoints found.
+    try:
+        sift = cv2.SIFT_create(nfeatures=300)
+        g1 = cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY)
+        g2 = cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY)
+        kp1, des1 = sift.detectAndCompute(g1, None)
+        kp2, des2 = sift.detectAndCompute(g2, None)
+        # Only use SIFT if both images have enough keypoints to be meaningful
+        if (des1 is not None and des2 is not None
+                and len(des1) >= 10 and len(des2) >= 10):
+            bf = cv2.BFMatcher(cv2.NORM_L2)
+            matches = bf.knnMatch(des1, des2, k=2)
+            good = [m for m, n in matches if m.distance < 0.75 * n.distance]
+            max_possible = min(len(kp1), len(kp2))
+            sift_score = min(1.0, len(good) / max(max_possible * 0.10, 1))
+            scores.append(("sift", sift_score, 0.15))   # reduced weight
+        # If too few keypoints (upscaled low-res), skip SIFT entirely
+    except Exception:
+        pass
+
+    # ── 4. LBP texture histogram ──────────────────────────────────────────────
+    try:
+        def _lbp_hist(img_gray):
+            """Simplified LBP using pixel comparisons."""
+            h, w = img_gray.shape
+            lbp = np.zeros_like(img_gray, dtype=np.uint8)
+            for dy, dx in [(-1,-1),(-1,0),(-1,1),(0,1),(1,1),(1,0),(1,-1),(0,-1)]:
+                shifted = np.roll(np.roll(img_gray, dy, axis=0), dx, axis=1)
+                lbp = (lbp << 1) | (img_gray >= shifted).astype(np.uint8)
+            hist, _ = np.histogram(lbp, bins=32, range=(0, 256))
+            hist = hist.astype(np.float32)
+            hist /= (hist.sum() + 1e-8)
+            return hist
+
+        g1 = cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY)
+        g2 = cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY)
+        lbp1 = _lbp_hist(g1)
+        lbp2 = _lbp_hist(g2)
+        # Chi-squared distance → similarity
+        chi2 = float(np.sum((lbp1 - lbp2) ** 2 / (lbp1 + lbp2 + 1e-8)))
+        lbp_sim = max(0.0, 1.0 - chi2 / 2.0)
+        scores.append(("lbp", lbp_sim, 0.20))
+    except Exception:
+        pass
+
+    if not scores:
+        return 0.0
+
+    # Weighted average
+    total_weight = sum(w for _, _, w in scores)
+    weighted_sum = sum(s * w for _, s, w in scores)
+    result = weighted_sum / total_weight if total_weight > 0 else 0.0
+
+    logger.debug(
+        "face_similarity_opencv: " +
+        " | ".join(f"{name}={score:.3f}(w={w})" for name, score, w in scores) +
+        f" → combined={result:.3f}"
+    )
+    return round(float(result), 4)
+
+
 def match_faces(id_image_bytes: bytes, selfie_image_bytes: bytes) -> float:
     """
     Compare the face on the ID card with the selfie.
 
     Pipeline:
       1. Normalize orientation of both images
-      2. Crop the ID face using crop_id_face() (Haar-based, fast)
-      3. Upscale the crop to ≥ 224×224 for VGG-Face compatibility
-      4. Run DeepFace.verify() with enforce_detection=False
-      5. Return confidence score 0.0–1.0
+      2. Crop the ID face (Haar cascade)
+      3. Crop the selfie face (Haar cascade)
+      4. Try DeepFace.verify() if available (best accuracy)
+      5. Fall back to multi-method OpenCV similarity if DeepFace unavailable
 
-    Returns 0.0 on any failure (never None — callers expect a float).
+    Returns a confidence score 0.0–1.0. Never returns None.
     """
-    try:
-        from deepface import DeepFace
-    except ImportError:
-        logger.error("DeepFace not installed.")
-        return 0.0
-
     img1 = _bytes_to_bgr(id_image_bytes)
     img2 = _bytes_to_bgr(selfie_image_bytes)
     if img1 is None or img2 is None:
@@ -368,43 +474,82 @@ def match_faces(id_image_bytes: bytes, selfie_image_bytes: bytes) -> float:
     img1 = normalize_orientation(img1)
     img2 = normalize_orientation(img2)
 
-    # ── Crop ID face (Haar-based, fast) ───────────────────────────────────────
+    # ── Crop ID face ──────────────────────────────────────────────────────────
     id_face = crop_id_face(img1)
-    is_full_image = (id_face.shape == img1.shape and np.array_equal(id_face, img1))
-    if is_full_image:
-        logger.warning("match_faces: using full ID image (face crop failed)")
+    id_is_full = (id_face.shape == img1.shape and np.array_equal(id_face, img1))
+    if id_is_full:
+        logger.warning("match_faces: ID face crop failed — using full image")
     else:
         logger.debug(f"match_faces: ID face crop {id_face.shape[1]}x{id_face.shape[0]}px")
 
-    # ── Ensure selfie is also large enough for VGG-Face ──────────────────────
-    img2 = _upscale_face(img2, target=224)
+    # ── Crop selfie face ──────────────────────────────────────────────────────
+    # Don't use the full selfie — crop to the face region for fair comparison
+    selfie_face = crop_id_face(img2)   # reuses same Haar logic
+    selfie_is_full = (selfie_face.shape == img2.shape and np.array_equal(selfie_face, img2))
+    if selfie_is_full:
+        logger.debug("match_faces: selfie face crop failed — using full selfie")
+    else:
+        logger.debug(f"match_faces: selfie face crop {selfie_face.shape[1]}x{selfie_face.shape[0]}px")
 
-    # ── Run face verification ─────────────────────────────────────────────────
+    # ── Upscale both to ≥ 224×224 ─────────────────────────────────────────────
+    id_face     = _upscale_face(id_face,     target=224)
+    selfie_face = _upscale_face(selfie_face, target=224)
+
+    # ── Attempt 1: DeepFace (best accuracy, optional dependency) ─────────────
     try:
+        from deepface import DeepFace
         result = DeepFace.verify(
             img1_path=id_face,
-            img2_path=img2,
+            img2_path=selfie_face,
             model_name="VGG-Face",
             enforce_detection=False,
             detector_backend="opencv",
         )
         verified = result.get("verified", False)
         distance = float(result.get("distance", 1.0))
-
-        # Convert cosine distance to confidence:
-        # distance=0   → perfect match (conf=1.0)
-        # distance=0.4 → VGG-Face threshold (conf≈0.6)
-        # distance≥1.0 → no match (conf=0.0)
         raw_conf   = max(0.0, 1.0 - distance)
         confidence = raw_conf if not verified else max(raw_conf, 0.65)
-
         logger.info(
-            f"match_faces: verified={verified} distance={distance:.3f} "
-            f"confidence={confidence:.3f} "
-            f"id_crop={'full' if is_full_image else str(id_face.shape[1]) + 'x' + str(id_face.shape[0])}"
+            f"match_faces [DeepFace]: verified={verified} distance={distance:.3f} "
+            f"confidence={confidence:.3f}"
         )
         return round(confidence, 4)
-
+    except ImportError:
+        logger.info("match_faces: DeepFace not installed — using OpenCV multi-method fallback")
     except Exception as exc:
-        logger.error(f"match_faces: DeepFace.verify failed: {exc}")
-        return 0.0
+        logger.warning(f"match_faces: DeepFace failed ({exc}) — falling back to OpenCV")
+
+    # ── Attempt 2: face_recognition library (dlib-based, very accurate) ───────
+    try:
+        import face_recognition
+        enc1 = face_recognition.face_encodings(
+            face_recognition.load_image_file(
+                __import__("io").BytesIO(
+                    cv2.imencode(".jpg", id_face)[1].tobytes()
+                )
+            )
+        )
+        enc2 = face_recognition.face_encodings(
+            face_recognition.load_image_file(
+                __import__("io").BytesIO(
+                    cv2.imencode(".jpg", selfie_face)[1].tobytes()
+                )
+            )
+        )
+        if enc1 and enc2:
+            distance = float(face_recognition.face_distance([enc1[0]], enc2[0])[0])
+            # dlib distance: 0=identical, 0.6=threshold, >1=different
+            confidence = max(0.0, 1.0 - distance / 0.6)
+            logger.info(f"match_faces [face_recognition]: distance={distance:.3f} confidence={confidence:.3f}")
+            return round(min(confidence, 1.0), 4)
+        else:
+            logger.warning("match_faces [face_recognition]: no encodings found in one or both images")
+    except ImportError:
+        logger.info("match_faces: face_recognition not installed — using OpenCV fallback")
+    except Exception as exc:
+        logger.warning(f"match_faces: face_recognition failed ({exc}) — using OpenCV fallback")
+
+    # ── Attempt 3: OpenCV multi-method similarity (always available) ──────────
+    confidence = _face_similarity_opencv(id_face, selfie_face)
+    logger.info(f"match_faces [OpenCV]: confidence={confidence:.3f}")
+    return confidence

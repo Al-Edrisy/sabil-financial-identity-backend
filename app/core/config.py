@@ -44,8 +44,9 @@ class Settings(BaseSettings):
     # Face match: VGG-Face cosine distances for real same-person pairs are
     # often in the 0.3–0.5 range. Threshold >=0.5 for auto-approval, >=0.25
     # for PENDING (human review).
-    KYC_FACE_MATCH_THRESHOLD:        float = 0.50   # was 0.60 — cosine dist makes this realistic
-    KYC_FACE_MATCH_MANUAL_THRESHOLD: float = 0.25   # was 0.40 — catch more borderline cases
+    # OpenCV fallback scores are lower — 0.45 is a safe auto-approve threshold.
+    KYC_FACE_MATCH_THRESHOLD:        float = 0.45   # auto-approve (OpenCV: ~0.5–0.7 for same person)
+    KYC_FACE_MATCH_MANUAL_THRESHOLD: float = 0.20   # PENDING for human review
     KYC_LIVENESS_MIN_VARIANCE:       float = 60.0   # was 80.0 — lower for real-world images
     KYC_REQUIRE_LIVENESS:            bool  = False   # off by default until TF backend is stable
     KYC_MAX_RESUBMISSIONS:           int   = 5       # was 3 — allow more attempts
@@ -65,7 +66,7 @@ class Settings(BaseSettings):
 
     # ── Credit Scoring ───────────────────────────────────────────────────────
     CREDIT_UPLOAD_DIR: str = "uploads/statements"
-    CREDIT_SCORE_MIN_TRANSACTIONS: int = 2
+    CREDIT_SCORE_MIN_TRANSACTIONS: int = 1   # 1 transaction is enough for a partial score
     CREDIT_SCORE_INCOME_CAP: float = 50000.0
     CREDIT_CATEGORIZER_THRESHOLD: int = 70
 

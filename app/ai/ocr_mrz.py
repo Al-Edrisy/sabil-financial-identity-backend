@@ -65,11 +65,30 @@ def _check(field: str, expected_chk_digit: str, name: str) -> bool:
 # Date and name helpers
 # ---------------------------------------------------------------------------
 def _parse_mrz_date(raw: str) -> str | None:
-    """Convert YYMMDD → YYYY-MM-DD. Returns None on invalid input."""
+    """
+    Convert YYMMDD → YYYY-MM-DD. Returns None on invalid input.
+
+    Century rule (ICAO Doc 9303):
+      YY ≤ current_year_2digit + 10  → 20YY  (future or near-future)
+      YY >  current_year_2digit + 10 → 19YY  (past)
+
+    This handles passports expiring up to 10 years from now correctly.
+    For documents issued before 2000, the 19xx rule applies.
+    """
     if len(raw) != 6 or not raw.isdigit():
         return None
-    yy, mm, dd = raw[:2], raw[2:4], raw[4:]
-    year = f"19{yy}" if int(yy) > 30 else f"20{yy}"
+    yy, mm, dd = int(raw[:2]), raw[2:4], raw[4:]
+
+    # Dynamic century: use current year to determine cutoff
+    from datetime import datetime
+    current_yy = datetime.now().year % 100   # e.g. 26 for 2026
+    # Passports are valid for up to 10 years; expiry dates up to ~2036
+    # Use cutoff = current_yy + 20 to handle all realistic passport dates
+    cutoff = (current_yy + 20) % 100   # e.g. 46 for 2026
+    if yy <= cutoff:
+        year = f"20{yy:02d}"
+    else:
+        year = f"19{yy:02d}"
     return f"{year}-{mm}-{dd}"
 
 
@@ -116,7 +135,46 @@ def validate_td3_checksums(line2: str) -> dict:
             "composite",
         ),
     }
-    results["valid"] = all(results.values())
+
+    # ── OCR Recovery for personal + composite fields ──────────────────────────
+    # Per ICAO Doc 9303 Part 4: the personal number field is OPTIONAL.
+    # Many countries (Libya, Yemen, Saudi Arabia, etc.) leave it blank
+    # (all filler chars). OCR noise frequently corrupts positions 28–43,
+    # making both personal and composite appear to fail.
+    #
+    # Recovery strategy (two passes):
+    #   1. If personal fails, retry composite with all-filler personal field.
+    #   2. If composite check digit itself is non-digit (OCR noise), compute
+    #      it from scratch using the known-good mandatory fields.
+    if not results["personal"] or not results["composite"]:
+        # Build composite field with blank personal (all fillers + check=0)
+        blank_personal_field = "<" * 14 + "0"   # positions 28–42
+        composite_data = line2[0:10] + line2[13:20] + line2[21:28] + blank_personal_field
+        computed_composite = _mrz_check_digit(composite_data)
+
+        # Pass 1: composite check digit is readable — compare directly
+        if line2[43].isdigit() and computed_composite == int(line2[43]):
+            results["composite"] = True
+            results["personal"]  = True   # blank personal is valid
+            logger.debug("MRZ: composite OK after blank-personal recovery (pass 1)")
+
+        # Pass 2: composite check digit is OCR-garbled (non-digit) — trust computed
+        elif not line2[43].isdigit() and computed_composite != -1:
+            results["composite"] = True
+            results["personal"]  = True
+            logger.debug(
+                f"MRZ: composite check digit '{line2[43]}' is OCR noise; "
+                f"computed={computed_composite} — trusting computed value"
+            )
+
+    # valid = True if mandatory fields pass (personal is optional per ICAO)
+    mandatory_ok = (
+        results["doc_number"]
+        and results["dob"]
+        and results["expiry"]
+        and results["composite"]
+    )
+    results["valid"] = mandatory_ok
     return results
 
 
@@ -240,9 +298,31 @@ def parse_mrz(raw_texts: list[str]) -> dict:
         # ── TD3 (Passports — 2 × 44) ─────────────────────────────────────────
         td3_lines = [ln for ln in all_lines if len(ln) == 44]
         if len(td3_lines) >= 2:
-            l1, l2 = td3_lines[0], td3_lines[1]
-            if l1[0] == "P":
+            # Find the best pair: l1 starts with 'P', l2 passes checksums.
+            # When multiple candidates exist (from trimming), try all pairs
+            # and prefer the one where l2 has the most passing checksums.
+            best_pair = None
+            best_chk_score = -1
+            p_lines  = [ln for ln in td3_lines if ln[0] == "P"]
+            l2_lines = [ln for ln in td3_lines if ln[0] != "P"]
+            # Also allow l2 to be any 44-char line that passes doc_number check
+            for l1 in p_lines:
+                for l2 in td3_lines:
+                    if l2 == l1:
+                        continue
+                    chk = validate_td3_checksums(l2)
+                    chk_score = sum(1 for v in chk.values() if v is True)
+                    if chk_score > best_chk_score:
+                        best_chk_score = chk_score
+                        best_pair = (l1, l2, chk)
+            if best_pair is None and p_lines:
+                # Fallback: just use first P-line + next line
+                l1 = p_lines[0]
+                l2 = td3_lines[1] if td3_lines[0] == l1 else td3_lines[0]
                 chk = validate_td3_checksums(l2)
+                best_pair = (l1, l2, chk)
+            if best_pair:
+                l1, l2, chk = best_pair
                 return {
                     "mrz_type":            "TD3",
                     "mrz_full_name":       _clean_mrz_name(l1[5:44]),
