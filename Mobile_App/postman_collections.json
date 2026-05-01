@@ -1,0 +1,1112 @@
+{
+  "info": {
+    "_postman_id": "sabil-api-v1-collection",
+    "name": "Sabil Financial Identity API",
+    "description": "Complete API collection for the Sabil Financial Identity Backend.\n\n## 3-Step User Flow\n1. **Step 1 — Auth**: Send OTP → Verify OTP → get `access_token`\n2. **Step 2 — KYC**: Upload ID photo + selfie (+ optional manual fields)\n3. **Step 3 — Credit**: Upload bank statements / receipts → get credit score\n\n## Authentication\nAll protected endpoints require:\n```\nAuthorization: Bearer {{access_token}}\n```\nThe token is automatically set after a successful `POST /auth/verify-otp`.\n\n## Dev Bypass\n- Phone: `+96742424242`\n- OTP code: `7744`\n\n## Base URL\nSet the `base_url` variable to your server (default: `http://localhost:8000`).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string",
+      "description": "Base URL of the Sabil backend server"
+    },
+    {
+      "key": "api_prefix",
+      "value": "/api/v1",
+      "type": "string",
+      "description": "API version prefix"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT access token — auto-set by the verify-otp request"
+    },
+    {
+      "key": "dev_phone",
+      "value": "+96742424242",
+      "type": "string",
+      "description": "Dev bypass phone number (always passes OTP)"
+    },
+    {
+      "key": "dev_otp",
+      "value": "7744",
+      "type": "string",
+      "description": "Dev bypass OTP code"
+    },
+    {
+      "key": "user_id",
+      "value": "1",
+      "type": "string",
+      "description": "Current user ID — auto-set after verify-otp"
+    },
+    {
+      "key": "target_user_id",
+      "value": "2",
+      "type": "string",
+      "description": "Target user ID for admin operations or wallet transfers"
+    },
+    {
+      "key": "transaction_id",
+      "value": "1",
+      "type": "string",
+      "description": "Parsed transaction ID for correction/resolve endpoints"
+    },
+    {
+      "key": "country_code",
+      "value": "YE",
+      "type": "string",
+      "description": "ISO country code for the user (e.g. YE, SA, TR, AE)"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+
+    {
+      "name": "🔐 Auth",
+      "description": "Step 1 of the user flow. Send OTP → Verify OTP → receive access_token.\n\nDev bypass: phone `+96742424242`, code `7744`.",
+      "item": [
+        {
+          "name": "Send OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has message', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('message');",
+                  "  pm.expect(body).to.have.property('phone_number');",
+                  "  pm.expect(body).to.have.property('expires_in');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"{{dev_phone}}\",\n  \"country_code\": \"{{country_code}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/auth/send-otp",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["auth", "send-otp"]
+            },
+            "description": "Sends a one-time password to the provided phone number.\n\n**Dev bypass:** phone `+96742424242` always receives code `7744`.\n\nRate limited: 3 requests/minute."
+          }
+        },
+        {
+          "name": "Verify OTP → Set Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has access_token', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('access_token');",
+                  "  pm.expect(body.token_type).to.eql('bearer');",
+                  "  // Auto-set collection variables",
+                  "  pm.collectionVariables.set('access_token', body.access_token);",
+                  "  pm.collectionVariables.set('user_id', String(body.user.id));",
+                  "  console.log('Token saved. User ID:', body.user.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"{{dev_phone}}\",\n  \"otp_code\": \"{{dev_otp}}\",\n  \"full_name\": \"Ahmed Sultan\",\n  \"country_code\": \"{{country_code}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/auth/verify-otp",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["auth", "verify-otp"]
+            },
+            "description": "Verifies the OTP code. On success:\n- Creates a new account (first time) or logs in the existing user\n- Returns `access_token` + user profile\n- **Auto-sets** `access_token` and `user_id` collection variables\n\n**Dev bypass:** phone `+96742424242` with code `7744` always succeeds."
+          }
+        },
+        {
+          "name": "Login via Firebase Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_token\": \"<firebase-id-token-from-client-sdk>\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/auth/login",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Backward-compatible Firebase token login. Verifies a Firebase ID token and returns the user profile. Creates a new account and wallet on first login.\n\nUse `/auth/send-otp` + `/auth/verify-otp` for the phone OTP flow instead."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👤 Users",
+      "description": "User profile management. Most endpoints require a valid Bearer token.\nAdmin-only endpoints require `is_admin=true` on the user account.",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has user fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('id');",
+                  "  pm.expect(body).to.have.property('phone_number');",
+                  "  pm.expect(body).to.have.property('onboarding_step');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/users/me",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Returns the profile of the currently authenticated user."
+          }
+        },
+        {
+          "name": "Get Onboarding Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has onboarding fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('onboarding_step');",
+                  "  pm.expect(body).to.have.property('phone_verified');",
+                  "  pm.expect(body).to.have.property('next_step');",
+                  "  pm.expect(body).to.have.property('next_step_url');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/users/me/onboarding-status",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["users", "me", "onboarding-status"]
+            },
+            "description": "Returns the current onboarding step and what the user needs to do next.\n\nSteps:\n- `0` — Phone not verified\n- `1` — Phone verified, KYC not started\n- `2` — KYC submitted\n- `3` — Financial documents uploaded"
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Ahmed Sultan Ahmed\",\n  \"email\": \"ahmed@example.com\",\n  \"country_code\": \"YE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/users/me",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Updates non-sensitive profile information. All fields are optional — only provided fields are updated.\n\nRate limited: 5 requests/minute."
+          }
+        },
+        {
+          "name": "Delete My Account",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/users/me",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["users", "me"]
+            },
+            "description": "⚠️ Permanently deletes the authenticated user's account and all associated data.\n\nReturns `204 No Content` on success.\n\nRate limited: 1 request/minute."
+          }
+        },
+        {
+          "name": "[Admin] List All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/users?skip=0&limit=20",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "skip",      "value": "0",    "description": "Pagination offset" },
+                { "key": "limit",     "value": "20",   "description": "Max results (default 100)" },
+                { "key": "email",     "value": "",     "description": "Filter by email (optional)", "disabled": true },
+                { "key": "phone",     "value": "",     "description": "Filter by phone (optional)", "disabled": true },
+                { "key": "is_active", "value": "true", "description": "Filter by active status (optional)", "disabled": true }
+              ]
+            },
+            "description": "**Admin only.** Retrieves a paginated and filtered list of all users."
+          }
+        },
+        {
+          "name": "[Admin] Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/users/{{target_user_id}}",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["users", "{{target_user_id}}"]
+            },
+            "description": "**Admin only.** Retrieves any user's profile by their internal ID."
+          }
+        },
+        {
+          "name": "[Admin] Update Any User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": true,\n  \"full_name\": \"Updated Name\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/users/{{target_user_id}}",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["users", "{{target_user_id}}"]
+            },
+            "description": "**Admin only.** Updates any user's profile or status."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🪪 KYC — Identity Verification",
+      "description": "Step 2 of the user flow. Upload a government-issued ID photo and a live selfie.\n\nThe pipeline runs:\n1. Image validation (MIME, size, decodability)\n2. Face detection (Haar cascade + DeepFace)\n3. Liveness check (sharpness + frequency analysis)\n4. OCR extraction (EasyOCR / Tesseract fallback)\n5. Document authenticity heuristics\n6. Face matching (VGG-Face via DeepFace)\n7. Duplicate ID detection\n\nAll file uploads use `multipart/form-data`.",
+      "item": [
+        {
+          "name": "Submit KYC Verification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Has KYC fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('id');",
+                  "  pm.expect(body).to.have.property('status');",
+                  "  pm.expect(body).to.have.property('face_match_score');",
+                  "  pm.expect(body).to.have.property('liveness_score');",
+                  "  console.log('KYC status:', body.status);",
+                  "  console.log('Face match:', body.face_match_score);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "id_card",
+                  "type": "file",
+                  "src": [],
+                  "description": "Government-issued ID photo (JPEG/PNG/WebP, max 10MB)"
+                },
+                {
+                  "key": "selfie",
+                  "type": "file",
+                  "src": [],
+                  "description": "Live selfie — face must be clearly visible"
+                },
+                {
+                  "key": "id_type",
+                  "value": "passport",
+                  "type": "text",
+                  "description": "Document type: national_id | passport | drivers_license | residence_permit"
+                },
+                {
+                  "key": "full_name",
+                  "value": "SALIH SAMIER S OTMAN",
+                  "type": "text",
+                  "description": "(Optional) Full name as on document — overrides OCR"
+                },
+                {
+                  "key": "id_number",
+                  "value": "AE205783",
+                  "type": "text",
+                  "description": "(Optional) Passport/ID number — overrides OCR"
+                },
+                {
+                  "key": "issue_date",
+                  "value": "2024-07-23",
+                  "type": "text",
+                  "description": "(Optional) Document issue date YYYY-MM-DD — overrides OCR"
+                },
+                {
+                  "key": "expiry_date",
+                  "value": "2032-07-22",
+                  "type": "text",
+                  "description": "(Optional) Document expiry date YYYY-MM-DD — overrides OCR"
+                },
+                {
+                  "key": "country",
+                  "value": "LY",
+                  "type": "text",
+                  "description": "(Optional) ISO country code of document (e.g. LY, YE, SA)"
+                },
+                {
+                  "key": "nationality",
+                  "value": "Libyan",
+                  "type": "text",
+                  "description": "(Optional) Nationality string — overrides OCR"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/kyc/verify",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["kyc", "verify"]
+            },
+            "description": "**Step 2** — Upload a government-issued ID photo and a live selfie.\n\nOptional manual fields override OCR extraction when provided. This is useful when OCR quality is poor.\n\nReturns a `KYCResponse` with:\n- `status`: `verified` | `pending` | `rejected`\n- `face_match_score`: 0.0–1.0\n- `liveness_score`: Laplacian variance\n- `authenticity_score`: 0.0–1.0\n- `rejection_reason`: if rejected\n\nRate limited: 3 requests/minute."
+          }
+        },
+        {
+          "name": "Resubmit KYC After Rejection",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "id_card",
+                  "type": "file",
+                  "src": [],
+                  "description": "Updated photo of identity document"
+                },
+                {
+                  "key": "selfie",
+                  "type": "file",
+                  "src": [],
+                  "description": "New live selfie"
+                },
+                {
+                  "key": "id_type",
+                  "value": "passport",
+                  "type": "text",
+                  "description": "Document type: national_id | passport | drivers_license | residence_permit"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/kyc/resubmit",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["kyc", "resubmit"]
+            },
+            "description": "Re-attempt verification after a `REJECTED` status. Only allowed when current status is `rejected` or `resubmitted`.\n\nCapped by `KYC_MAX_RESUBMISSIONS` setting (default: 30).\n\nRate limited: 2 requests/minute."
+          }
+        },
+        {
+          "name": "Get KYC Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has status field', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(['verified','pending','rejected','resubmitted']).to.include(body.status);",
+                  "  console.log('KYC status:', body.status, '| Summary:', body.verification_summary);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/kyc/status",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["kyc", "status"]
+            },
+            "description": "Returns the most recent active KYC record with full verification details including `verification_summary` (human-readable one-liner)."
+          }
+        },
+        {
+          "name": "Get KYC History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/kyc/history",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["kyc", "history"]
+            },
+            "description": "Returns all past KYC attempts including rejections, ordered newest first."
+          }
+        },
+        {
+          "name": "Debug — Inspect OCR Output",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "id_card",
+                  "type": "file",
+                  "src": [],
+                  "description": "ID card image to inspect"
+                },
+                {
+                  "key": "id_type",
+                  "value": "passport",
+                  "type": "text",
+                  "description": "Document type"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/kyc/debug-ocr",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["kyc", "debug-ocr"]
+            },
+            "description": "Upload an ID image and see exactly what OCR extracted — raw tokens, field extraction results, MRZ parsing, variant scores.\n\n**No data is saved.** Use to diagnose OCR quality issues."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛡️ Admin — KYC",
+      "description": "Admin-only KYC management endpoints. Require `is_admin=true` on the authenticated user.",
+      "item": [
+        {
+          "name": "[Admin] List KYC Applications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/admin/kyc/list?page=1&page_size=20",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["admin", "kyc", "list"],
+              "query": [
+                { "key": "page",         "value": "1",        "description": "Page number (default 1)" },
+                { "key": "page_size",    "value": "20",       "description": "Results per page (max 100)" },
+                { "key": "status",       "value": "pending",  "description": "Filter: pending | verified | rejected | resubmitted", "disabled": true },
+                { "key": "expired_only", "value": "false",    "description": "Only expired VERIFIED records", "disabled": true },
+                { "key": "user_id",      "value": "",         "description": "Filter by user ID", "disabled": true },
+                { "key": "id_number",    "value": "",         "description": "Search by ID number (blind index)", "disabled": true }
+              ]
+            },
+            "description": "**Admin only.** Paginated list of all KYC applications with optional filters."
+          }
+        },
+        {
+          "name": "[Admin] Submit Manual Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"note\": \"Documents verified manually. All checks passed.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/admin/kyc/{{target_user_id}}/review",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["admin", "kyc", "{{target_user_id}}", "review"]
+            },
+            "description": "**Admin only.** Approve or reject a KYC application manually.\n\nSet `approved: false` to reject with a note."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📊 Credit Scoring",
+      "description": "Step 3 of the user flow. Upload financial documents → extract transactions → compute credit score (300–850).\n\n**Supported file formats:** JPEG, PNG, WebP, PDF, CSV, TXT\n**Multiple files:** send multiple `files` fields in one request\n\nThe pipeline:\n1. OCR / text extraction per file\n2. Transaction parsing (Strategy A/B/C/D)\n3. Currency normalization\n4. Categorization (12 categories, EN/AR/TR)\n5. Signal computation (income_level, income_stability, savings_rate, activity, burden)\n6. Score computation (300–850)\n7. Persist + return score",
+      "item": [
+        {
+          "name": "Upload Financial Documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Has score and upload_id', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('upload_id');",
+                  "  pm.expect(body).to.have.property('row_count');",
+                  "  pm.expect(body).to.have.property('score');",
+                  "  pm.expect(body.score).to.have.property('score');",
+                  "  pm.expect(body.score).to.have.property('risk_level');",
+                  "  console.log('Upload ID:', body.upload_id);",
+                  "  console.log('Rows extracted:', body.row_count);",
+                  "  console.log('Score:', body.score.score, '|', body.score.risk_level, '|', body.score.score_band);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": [],
+                  "description": "Financial document (image/PDF/CSV/TXT, max 25MB). Add multiple 'files' entries for batch upload."
+                },
+                {
+                  "key": "user_country",
+                  "value": "YE",
+                  "type": "text",
+                  "description": "(Optional) ISO country code for currency conversion (e.g. YE, SA, TR, AE). Defaults to user profile country."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/credit/upload",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["credit", "upload"]
+            },
+            "description": "**Step 3** — Upload one or more financial documents for credit scoring.\n\nSupported formats: JPEG, PNG, WebP, PDF, CSV, TXT (max 25MB each).\n\nTo upload multiple files, add multiple `files` form fields.\n\nReturns:\n- `upload_id`: unique session identifier\n- `row_count`: transactions extracted\n- `needs_review_count`: rows flagged for review\n- `score`: full `CreditScoreResponse`\n\nRate limited: 3 requests/minute."
+          }
+        },
+        {
+          "name": "Get Latest Credit Score",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Score in valid range', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.score).to.be.within(300, 850);",
+                  "  pm.expect(['trusted','moderate','risky']).to.include(body.risk_level);",
+                  "  pm.expect(['Excellent','Good','Fair','Poor','Very Poor']).to.include(body.score_band);",
+                  "  console.log('Score:', body.score, '|', body.risk_level, '|', body.score_band);",
+                  "  console.log('Data quality:', body.data_quality);",
+                  "  console.log('Signals:', JSON.stringify(body.signals));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/credit/score",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["credit", "score"]
+            },
+            "description": "Returns the most recent active credit score for the authenticated user.\n\nResponse includes:\n- `score`: 300–850\n- `risk_level`: trusted | moderate | risky\n- `score_band`: Excellent | Good | Fair | Poor | Very Poor\n- `signals`: income_level, income_stability, savings_rate, activity, burden\n- `insights`: array of human-readable insights\n- `transactions_summary`: totals by category\n- `data_quality`: good | low_data | insufficient"
+          }
+        },
+        {
+          "name": "List Parsed Transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/credit/transactions?page=1&page_size=20",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["credit", "transactions"],
+              "query": [
+                { "key": "page",         "value": "1",       "description": "Page number" },
+                { "key": "page_size",    "value": "20",      "description": "Results per page (max 100)" },
+                { "key": "type",         "value": "income",  "description": "Filter: income | expense | unknown", "disabled": true },
+                { "key": "needs_review", "value": "true",    "description": "Filter by review flag", "disabled": true }
+              ]
+            },
+            "description": "Returns a paginated list of all parsed transactions for the current user.\n\nEach transaction includes: description, amount, currency, type, category, date, confidence, needs_review."
+          }
+        },
+        {
+          "name": "Get Transactions Flagged for Review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/credit/transactions/review",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["credit", "transactions", "review"]
+            },
+            "description": "Returns all parsed transaction rows that need human review (`needs_review=true`)."
+          }
+        },
+        {
+          "name": "Correct a Parsed Transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns updated score', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('score');",
+                  "  console.log('Recomputed score after correction:', body.score);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Monthly Salary\",\n  \"amount\": 2500.00,\n  \"currency\": \"USD\",\n  \"type\": \"income\",\n  \"category\": \"salary\",\n  \"transaction_date\": \"2026-04-01\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/credit/transactions/{{transaction_id}}/correct",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["credit", "transactions", "{{transaction_id}}", "correct"]
+            },
+            "description": "Fix a misparse (wrong amount, description, or type). All fields are optional — only provided fields are updated.\n\nAutomatically triggers score recomputation and returns the updated `CreditScoreResponse`."
+          }
+        },
+        {
+          "name": "List Supported Currencies",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array of currencies', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.be.an('array');",
+                  "  pm.expect(body.length).to.be.above(0);",
+                  "  console.log('Supported currencies:', body.length);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/credit/currencies",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["credit", "currencies"]
+            },
+            "description": "Returns all currencies supported for financial document processing with their exchange rates relative to USD.\n\nNo authentication required."
+          }
+        },
+        {
+          "name": "Debug — Inspect OCR + Parser Output",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "statement",
+                  "type": "file",
+                  "src": [],
+                  "description": "Statement image to inspect (JPEG/PNG/WebP)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/credit/debug-ocr",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["credit", "debug-ocr"]
+            },
+            "description": "Upload a statement image and see exactly what OCR extracted and how the parser classified each line.\n\n**No data is saved.** Use to diagnose why transactions are showing as 'unknown'.\n\nReturns: OCR tokens by reader, parsed rows with type/category/confidence, strategy used."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛡️ Admin — Credit Scoring",
+      "description": "Admin-only credit scoring management. Require `is_admin=true` on the authenticated user.",
+      "item": [
+        {
+          "name": "[Admin] List All Credit Scores",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/admin/credit/list?page=1&page_size=20",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["admin", "credit", "list"],
+              "query": [
+                { "key": "page",       "value": "1",        "description": "Page number" },
+                { "key": "page_size",  "value": "20",       "description": "Results per page (max 100)" },
+                { "key": "risk_level", "value": "risky",    "description": "Filter: trusted | moderate | risky", "disabled": true }
+              ]
+            },
+            "description": "**Admin only.** Paginated list of all users' active credit scores. Filter by risk_level."
+          }
+        },
+        {
+          "name": "[Admin] Get User Transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/admin/credit/users/{{target_user_id}}/transactions?page=1&page_size=20",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["admin", "credit", "users", "{{target_user_id}}", "transactions"],
+              "query": [
+                { "key": "page",      "value": "1",  "description": "Page number" },
+                { "key": "page_size", "value": "20", "description": "Results per page (max 100)" }
+              ]
+            },
+            "description": "**Admin only.** View any user's parsed transactions by their user ID."
+          }
+        },
+        {
+          "name": "[Admin] Force Rescore User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns new score', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.score).to.be.within(300, 850);",
+                  "  console.log('Rescored:', body.score, '|', body.risk_level);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/admin/credit/users/{{target_user_id}}/rescore",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["admin", "credit", "users", "{{target_user_id}}", "rescore"]
+            },
+            "description": "**Admin only.** Recomputes the credit score from all existing parsed transactions for a user. Useful after manual transaction corrections."
+          }
+        },
+        {
+          "name": "[Admin] Global Review Queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/admin/credit/review-queue?page=1&page_size=20",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["admin", "credit", "review-queue"],
+              "query": [
+                { "key": "page",      "value": "1",  "description": "Page number" },
+                { "key": "page_size", "value": "20", "description": "Results per page (max 100)" }
+              ]
+            },
+            "description": "**Admin only.** All `needs_review=true` transaction rows across all users."
+          }
+        },
+        {
+          "name": "[Admin] Resolve Flagged Transaction",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/admin/credit/transactions/{{transaction_id}}/resolve?correct_type=income&correct_category=salary",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["admin", "credit", "transactions", "{{transaction_id}}", "resolve"],
+              "query": [
+                { "key": "correct_type",     "value": "income", "description": "Corrected type: income | expense | unknown", "disabled": false },
+                { "key": "correct_category", "value": "salary", "description": "Corrected category (optional)", "disabled": false }
+              ]
+            },
+            "description": "**Admin only.** Mark a `needs_review` row as resolved. Optionally correct the type and/or category."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "💳 Wallet",
+      "description": "Wallet balance, transfers, withdrawals, top-ups, and transaction history.",
+      "item": [
+        {
+          "name": "Get Wallet Balance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has balance', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('balance');",
+                  "  pm.expect(body).to.have.property('currency');",
+                  "  console.log('Balance:', body.balance, body.currency);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/wallet/balance",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["wallet", "balance"]
+            },
+            "description": "Returns the current user's wallet balance and currency."
+          }
+        },
+        {
+          "name": "Transfer Funds",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has transaction fields', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('id');",
+                  "  pm.expect(body.type).to.eql('transfer');",
+                  "  pm.expect(body.status).to.eql('completed');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to_user_id\": {{target_user_id}},\n  \"amount\": 50.00,\n  \"description\": \"Payment for services\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/wallet/transfer",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["wallet", "transfer"]
+            },
+            "description": "Transfers funds from the current user's wallet to another user by their ID.\n\nRate limited: 10 requests/minute."
+          }
+        },
+        {
+          "name": "Withdraw Funds",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 100.00,\n  \"description\": \"Monthly withdrawal\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/wallet/withdraw",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["wallet", "withdraw"]
+            },
+            "description": "Executes a withdrawal from the user's wallet.\n\nRate limited: 5 requests/minute."
+          }
+        },
+        {
+          "name": "Top Up Wallet (Simulated)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500.00\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/wallet/topup",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["wallet", "topup"]
+            },
+            "description": "Simulates a wallet top-up. Replace with a real payment gateway in production.\n\nRate limited: 5 requests/minute."
+          }
+        },
+        {
+          "name": "Get Transaction History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/wallet/history",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["wallet", "history"]
+            },
+            "description": "Returns the full transaction history for the authenticated user."
+          }
+        },
+        {
+          "name": "Get Transaction Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/wallet/transactions/{{transaction_id}}",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["wallet", "transactions", "{{transaction_id}}"]
+            },
+            "description": "Fetches details for a specific wallet transaction by its ID."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "❤️ Health",
+      "description": "Service health check. No authentication required.",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Service healthy', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.status).to.eql('healthy');",
+                  "  pm.expect(body.service).to.eql('sabil-backend');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/health",
+              "host": ["{{base_url}}{{api_prefix}}"],
+              "path": ["health"]
+            },
+            "description": "Returns `{\"status\": \"healthy\", \"service\": \"sabil-backend\"}`. No authentication required."
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request: log the request being made",
+          "console.log('[Sabil API]', pm.request.method, pm.request.url.toString());"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test: check for unexpected 5xx errors",
+          "pm.test('No server error (5xx)', () => {",
+          "  pm.expect(pm.response.code).to.not.be.within(500, 599);",
+          "});",
+          "",
+          "// Log response time",
+          "console.log('[Sabil API] Response time:', pm.response.responseTime + 'ms', '| Status:', pm.response.code);"
+        ]
+      }
+    }
+  ]
+}

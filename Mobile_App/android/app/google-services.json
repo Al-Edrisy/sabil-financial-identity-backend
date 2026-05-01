@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "541562458303",
+    "firebase_url": "https://chatapplication-e6a6a-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "chatapplication-e6a6a",
+    "storage_bucket": "chatapplication-e6a6a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:541562458303:android:c03e64257dbcd624ad760a",
+        "android_client_info": {
+          "package_name": "com.example.sabil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDoGhkp8wi8-QEC_0AUjblIUc1C6Hf_6Xs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
