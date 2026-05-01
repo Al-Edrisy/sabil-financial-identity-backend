@@ -1,5 +1,11 @@
 # Sabil — Financial Identity Backend
 
+![License](https://img.shields.io/github/license/Al-Edrisy/sabil-financial-identity-backend)
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-009688.svg?style=flat&logo=fastapi&logoColor=white)
+![Status](https://img.shields.io/badge/status-MVP-orange.svg)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+
 **Sabil Backend** is a scalable FastAPI-based fintech API designed to power a unified **Financial Identity (Fin-ID)** system for emerging markets.
 
 It enables users to create a portable financial identity, complete digital verification (KYC), generate AI-driven credit scores, and simulate cross-border transactions.
