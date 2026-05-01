@@ -94,8 +94,34 @@ async def on_startup() -> None:
                     logger.debug(f"Migration skipped (likely already applied): {col_err}")
 
             logger.info("✅ Schema synchronization complete.")
+
     except Exception as e:
         logger.error(f"❌ Schema sync failed: {e}")
+
+    # ── Seed Test Data (independent — never blocks startup) ──────────────────
+    try:
+        from app.utils.seed_test_data import seed_test_users
+        from app.database.session import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            await seed_test_users(session)
+    except Exception as seed_err:
+        logger.warning(f"⚠️  Test data seeding skipped: {seed_err}")
+
+    # ── Pre-warm AI Models (background — doesn't block startup or --reload) ──
+    import asyncio as _asyncio
+
+    async def _prewarm():
+        try:
+            from app.ai.ocr import get_ocr_reader, get_statement_ocr_reader
+            logger.info("🤖 Pre-warming AI models in background...")
+            await _asyncio.to_thread(get_ocr_reader)
+            await _asyncio.to_thread(get_statement_ocr_reader)
+            logger.info("✅ AI models pre-warmed and ready.")
+        except Exception as ai_err:
+            logger.warning(f"⚠️  AI pre-warming failed or skipped: {ai_err}")
+
+    _asyncio.ensure_future(_prewarm())
+
 
 
 @app.on_event("shutdown")

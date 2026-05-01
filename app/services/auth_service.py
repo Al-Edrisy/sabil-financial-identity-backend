@@ -58,7 +58,8 @@ class AuthService:
         phone = phone_number.strip()
 
         # Dev bypass
-        if phone == DEV_PHONE:
+        dev_phones = {DEV_PHONE, "+96755555555", "+967111111111", "+967222222222"}
+        if phone in dev_phones:
             code = DEV_OTP_CODE
             logger.info(f"[DEV] OTP for {phone}: {code} (dev bypass)")
         else:
@@ -99,6 +100,7 @@ class AuthService:
         stored = _OTP_STORE.get(phone)
 
         if stored is None:
+            logger.warning(f"Verify OTP failed for {phone}: No OTP found in store.")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No OTP found for this phone number. Please request a new code.",
@@ -107,6 +109,7 @@ class AuthService:
         # Check expiry
         if datetime.now(timezone.utc) > stored["expires_at"]:
             _OTP_STORE.pop(phone, None)
+            logger.warning(f"Verify OTP failed for {phone}: OTP expired.")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="OTP has expired. Please request a new code.",
@@ -116,6 +119,7 @@ class AuthService:
         stored["attempts"] += 1
         if stored["attempts"] > 5:
             _OTP_STORE.pop(phone, None)
+            logger.warning(f"Verify OTP failed for {phone}: Too many attempts.")
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Too many incorrect attempts. Please request a new OTP.",
@@ -123,6 +127,7 @@ class AuthService:
 
         # Check code
         if stored["code"] != code:
+            logger.warning(f"Verify OTP failed for {phone}: Incorrect code (expected {stored['code']}, got {code}).")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Incorrect OTP code. {5 - stored['attempts'] + 1} attempt(s) remaining.",
