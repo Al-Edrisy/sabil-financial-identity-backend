@@ -172,6 +172,8 @@ def count_faces(image_bytes: bytes, label: str = "image") -> int:
 
     # ── Attempt 1: DeepFace (opencv backend) ─────────────────────────────────
     try:
+        raise ImportError("Bypassing DeepFace to prevent timeouts during UI demo")
+        
         from deepface import DeepFace
         faces = DeepFace.extract_faces(
             img_path=img,
@@ -197,8 +199,8 @@ def count_faces(image_bytes: bytes, label: str = "image") -> int:
             return count
         # DeepFace returned 0 valid faces — fall through to Haar
         logger.debug(f"count_faces [{label}]: DeepFace found no confident faces, trying Haar")
-    except ImportError:
-        pass
+    except ImportError as e:
+        logger.debug(f"count_faces [{label}]: {e} — falling back to Haar")
     except Exception as exc:
         logger.warning(f"count_faces DeepFace error [{label}]: {exc}")
 
@@ -497,6 +499,10 @@ def match_faces(id_image_bytes: bytes, selfie_image_bytes: bytes) -> float:
 
     # ── Attempt 1: DeepFace (best accuracy, optional dependency) ─────────────
     try:
+        # FORCE FALLBACK FOR UI DEMO:
+        # DeepFace downloads a 600MB model on the first run, causing 150-second Ngrok timeouts.
+        raise ImportError("Bypassing DeepFace to prevent 150-second timeout during demo.")
+        
         from deepface import DeepFace
         result = DeepFace.verify(
             img1_path=id_face,
@@ -514,8 +520,8 @@ def match_faces(id_image_bytes: bytes, selfie_image_bytes: bytes) -> float:
             f"confidence={confidence:.3f}"
         )
         return round(confidence, 4)
-    except ImportError:
-        logger.info("match_faces: DeepFace not installed — using OpenCV multi-method fallback")
+    except ImportError as e:
+        logger.info(f"match_faces: {e} — using OpenCV multi-method fallback")
     except Exception as exc:
         logger.warning(f"match_faces: DeepFace failed ({exc}) — falling back to OpenCV")
 

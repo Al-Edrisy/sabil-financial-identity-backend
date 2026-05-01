@@ -1,10 +1,20 @@
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from fastapi import Request
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        
+        try:
+            response = await call_next(request)
+        except RuntimeError as e:
+            # Client disconnected before the response could be sent.
+            # This commonly happens when ngrok times out on long-running
+            # requests (e.g. KYC with OCR model initialisation).
+            # Silently return a minimal 200 to avoid crashing the ASGI stack.
+            if "No response returned" in str(e):
+                return Response(status_code=200)
+            raise
+
         # Prevent MIME type sniffing
         response.headers["X-Content-Type-Options"] = "nosniff"
         
