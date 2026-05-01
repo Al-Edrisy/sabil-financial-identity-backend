@@ -62,6 +62,61 @@ class StatementService:
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def _normalize_text_lines(lines: list) -> list:
+        """
+        Detect and normalize Python tuple-format transaction lines.
+
+        Converts lines like:
+            ('2026-01-01', 'Salary January', 2500, 'USD')
+            OR
+            2026-01-01,Salary,1500,USD
+        into plain parseable text:
+            2026-01-01 Salary January 2500 USD
+
+        This allows .txt test files generated from Python lists to be parsed
+        correctly without any changes on the Flutter/client side.
+        """
+        import re
+        # Pattern: ('YYYY-MM-DD', 'description', amount, 'CURRENCY')
+        TUPLE_RE = re.compile(
+            r"\(\s*['\"]?(\d{4}-\d{2}-\d{2})['\"]?\s*,"
+            r"\s*['\"]([^'\"]+)['\"]\s*,"
+            r"\s*(-?[\d.]+)\s*,"
+            r"\s*['\"]([A-Z]{3})['\"]\s*\)",
+            re.IGNORECASE,
+        )
+        # Pattern: YYYY-MM-DD,description,amount,CURRENCY
+        CSV_TXT_RE = re.compile(
+            r"^(\d{4}-\d{2}-\d{2})\s*,\s*([^,]+)\s*,\s*(-?[\d.]+)\s*,\s*([A-Z]{3})$",
+            re.IGNORECASE,
+        )
+        
+        normalized = []
+        converted_count = 0
+        for line in lines:
+            stripped = line.strip()
+            m_tuple = TUPLE_RE.search(stripped)
+            m_csv = CSV_TXT_RE.match(stripped)
+            
+            if m_tuple:
+                date_str, desc, amount_str, currency = m_tuple.groups()
+                normalized.append(f"{date_str} {desc} {amount_str} {currency}")
+                converted_count += 1
+            elif m_csv:
+                date_str, desc, amount_str, currency = m_csv.groups()
+                normalized.append(f"{date_str} {desc.strip()} {amount_str} {currency}")
+                converted_count += 1
+            else:
+                normalized.append(line)
+                
+        if converted_count:
+            logger.info(
+                f"_normalize_text_lines: converted {converted_count}/{len(lines)} "
+                "lines to plain text"
+            )
+        return normalized
+
     async def _extract_lines_from_file(
         self,
         file_bytes:   bytes,
@@ -77,11 +132,12 @@ class StatementService:
             if not lines:
                 logger.info(f"PDF has no text layer, attempting OCR: {filename}")
                 lines = await self._ocr_image(file_bytes)
-            return lines
+            return self._normalize_text_lines(lines)
         elif category == "csv":
             return extract_text_from_csv(file_bytes)
         elif category == "text":
-            return extract_text_from_plain(file_bytes)
+            lines = extract_text_from_plain(file_bytes)
+            return self._normalize_text_lines(lines)
         return []
 
     async def _ocr_image(self, image_bytes: bytes) -> list:
