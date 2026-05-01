@@ -1,0 +1,7 @@
+scratch/
+__pycache__/
+*.pyc
+*.pyo
+venv/
+uploads/
+.git/
