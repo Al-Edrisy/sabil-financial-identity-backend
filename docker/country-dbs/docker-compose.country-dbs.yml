@@ -1,0 +1,93 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Sabil — Country-Specific PostgreSQL Databases
+#  Three isolated DBs, one per country, all on a shared network so Langflow
+#  can query any of them.
+#
+#  Start:  docker compose -f docker/country-dbs/docker-compose.country-dbs.yml up -d
+#  Stop:   docker compose -f docker/country-dbs/docker-compose.country-dbs.yml down
+#
+#  Ports (host):
+#    Libya  → 5433  (DB: sabil_ly,  user: sabil / sabil123)
+#    Yemen  → 5434  (DB: sabil_ye,  user: sabil / sabil123)
+#    Egypt  → 5435  (DB: sabil_eg,  user: sabil / sabil123)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Libya ──────────────────────────────────────────────────────────────────
+  postgres_libya:
+    image: postgres:15-alpine
+    container_name: sabil_db_libya
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     sabil
+      POSTGRES_PASSWORD: sabil123
+      POSTGRES_DB:       sabil_ly
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./init_libya.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - sabil_data_libya:/var/lib/postgresql/data
+    networks:
+      - sabil_country_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sabil -d sabil_ly"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Yemen ──────────────────────────────────────────────────────────────────
+  postgres_yemen:
+    image: postgres:15-alpine
+    container_name: sabil_db_yemen
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     sabil
+      POSTGRES_PASSWORD: sabil123
+      POSTGRES_DB:       sabil_ye
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./init_yemen.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - sabil_data_yemen:/var/lib/postgresql/data
+    networks:
+      - sabil_country_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sabil -d sabil_ye"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Egypt ──────────────────────────────────────────────────────────────────
+  postgres_egypt:
+    image: postgres:15-alpine
+    container_name: sabil_db_egypt
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     sabil
+      POSTGRES_PASSWORD: sabil123
+      POSTGRES_DB:       sabil_eg
+    ports:
+      - "5435:5432"
+    volumes:
+      - ./init_egypt.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - sabil_data_egypt:/var/lib/postgresql/data
+    networks:
+      - sabil_country_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sabil -d sabil_eg"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sabil_data_libya:
+  sabil_data_yemen:
+  sabil_data_egypt:
+
+networks:
+  sabil_country_net:
+    name: sabil_country_net
+    driver: bridge
